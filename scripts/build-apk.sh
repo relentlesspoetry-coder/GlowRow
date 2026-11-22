@@ -18,12 +18,13 @@ mkdir -p "$(dirname "$OUT")" "$scratch/classes" "$scratch/dex"
 "$TOOLS/aapt2" compile --dir "$source_dir/res" -o "$scratch/resources.zip"
 "$TOOLS/aapt2" link -I "$PLATFORM" --manifest "$source_dir/AndroidManifest.xml" \
     -A "$source_dir/assets" -o "$scratch/unsigned.apk" "$scratch/resources.zip"
+mapfile -t sources < <(find "$source_dir/java" -type f -name "*.java" -print)
 if [[ -n "${GLOWROW_ECJ_JAR:-}" ]]; then
     java -jar "$GLOWROW_ECJ_JAR" -source 8 -target 8 -nowarn -encoding UTF-8 -bootclasspath "$PLATFORM" \
-        -d "$scratch/classes" "$source_dir/java/com/glowrow/app/MainActivity.java"
+        -d "$scratch/classes" "${sources[@]}"
 else
     javac -source 8 -target 8 -encoding UTF-8 -bootclasspath "$PLATFORM" \
-        -d "$scratch/classes" "$source_dir/java/com/glowrow/app/MainActivity.java"
+        -d "$scratch/classes" "${sources[@]}"
 fi
 mapfile -t classfiles < <(find "$scratch/classes" -type f -name '*.class' -print)
 "$TOOLS/d8" --release --min-api 26 --lib "$PLATFORM" --output "$scratch/dex" "${classfiles[@]}"

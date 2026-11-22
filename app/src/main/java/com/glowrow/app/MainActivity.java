@@ -18,14 +18,17 @@ import java.nio.charset.StandardCharsets;
 
 public final class MainActivity extends Activity {
     private static final int PICK_PATTERN = 41;
-    // A stable private origin gives DOM storage a fixed identity. No request is
-    // ever made to this origin or any other origin.
+    // A stable private origin gives DOM storage a fixed identity. The WebView
+    // cannot reach the network; native GitHub traffic requires an update tap.
     private static final String ORIGIN = "https://glowrow.invalid/";
+    private static final String CHECK_UPDATE = ORIGIN + "native/check-for-updates";
     private ValueCallback<Uri[]> pickerCallback;
     private WebView viewer;
+    private Updates updates;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        updates = new Updates(this);
         viewer = new WebView(this);
         viewer.setBackgroundColor(0xFF0D141E);
         setContentView(viewer);
@@ -36,6 +39,9 @@ public final class MainActivity extends Activity {
         viewer.getSettings().setBlockNetworkLoads(true);
         viewer.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
+                if (request.isForMainFrame() && request.hasGesture()
+                        && ORIGIN.equals(view.getUrl()) && CHECK_UPDATE.equals(request.getUrl().toString()))
+                    updates.check();
                 return true;
             }
         });
@@ -65,7 +71,7 @@ public final class MainActivity extends Activity {
             byte[] block = new byte[8192];
             for (int n; (n = source.read(block)) != -1;) data.write(block, 0, n);
             viewer.loadDataWithBaseURL(ORIGIN, data.toString(StandardCharsets.UTF_8.name()),
-                    "text/html", "UTF-8", null);
+                    "text/html", "UTF-8", ORIGIN);
         } catch (IOException missing) {
             Toast.makeText(this, "GlowRow could not open its viewer.", Toast.LENGTH_LONG).show();
             finish();
@@ -83,6 +89,8 @@ public final class MainActivity extends Activity {
         if (request == PICK_PATTERN) {
             Uri image = result == RESULT_OK && data != null ? data.getData() : null;
             finishPicker(image != null && "content".equals(image.getScheme()) ? image : null);
+        } else if (request == Updates.ENABLE_INSTALL) {
+            updates.returnedFromSettings();
         }
     }
 

@@ -9,8 +9,9 @@ function app(storage = new Map()) {
   const elements = new Map();
   const paint = [];
   const ctx = {
-    fillRect(x,y,w,h) { paint.push({color:this.fillStyle,x,y,w,h}); },
-    beginPath(){}, moveTo(){}, lineTo(){}, stroke(){}, strokeRect(){},
+    fillRect(x,y,w,h) { paint.push({color:this.fillStyle,alpha:this.globalAlpha,x,y,w,h}); },
+    beginPath(){}, moveTo(){}, lineTo(){}, stroke(){},
+    strokeRect(x,y,w,h){paint.push({outline:this.strokeStyle,alpha:this.globalAlpha,x,y,w,h});},
   };
   function element(id) {
     if (!elements.has(id)) elements.set(id,{
@@ -45,17 +46,37 @@ test('every corner covers each cell once for a rectangular pattern',()=>{
     assert.equal(new Set(rows.flat().map(cell=>`${cell.r},${cell.c}`)).size,18);
   }
 });
-test('renders only the active diagonal over a dark board and restores progress',()=>{
-  const storage = new Map();
+test('keeps a full faded pattern, highlights just the active diagonal, and restores progress',()=>{
+  const storage = new Map([['c2c-crochet-v1',JSON.stringify({activeId:'fixture',projects:[{
+    id:'fixture',name:'Contrasting colors',width:3,height:2,
+    pixels:[['#ffffff','#e84040','#e84040'],['#000000','#000000','#173061']],
+    row:1,corner:'tl',
+  }]})]]);
   const {evaluate,element,paint}=app(storage);
   assert.equal(evaluate('current().row'),1);
-  assert.equal(element('totalRows').textContent,29);
+  assert.equal(element('totalRows').textContent,4);
+  function checkActive(active) {
+    const backdrop=paint[0];
+    assert.deepEqual(backdrop,{color:'#35414f',alpha:1,x:0,y:0,w:78,h:52});
+    const faded=paint.filter(p=>p.color&&p.alpha<1);
+    assert.deepEqual(faded.map(({color,x,y,w,h})=>[color,x,y,w,h]),[
+      ['#ffffff',0,0,26,26],['#e84040',26,0,52,26],
+      ['#000000',0,26,52,26],['#173061',52,26,26,26],
+    ]);
+    assert.ok(faded.every(p=>p.alpha===0.42));
+    const highlighted=paint.slice(1).filter(p=>p.color&&p.alpha===1);
+    assert.deepEqual(highlighted.map(({color,x,y,w,h})=>[color,x,y,w,h]),active.map(([color,x,y])=>[color,x,y,24,24]));
+    assert.equal(paint.filter(p=>p.outline&&p.alpha===1).length,active.length);
+  }
+  checkActive([['#ffffff',1,1]]);
+  paint.length=0;
   element('nextRow').events.click();
   assert.equal(evaluate('current().row'),2);
-  assert.equal(paint.at(-3).color,'#05090e');
-  assert.equal(paint.at(-2).w,24);
-  assert.equal(paint.at(-1).w,24);
+  checkActive([['#000000',1,27],['#e84040',27,1]]);
   assert.equal(app(storage).evaluate('current().row'),2);
+  paint.length=0;
+  element('previousRow').events.click();
+  checkActive([['#ffffff',1,1]]);
 });
 test('Android Back closes an open dialog before leaving the app',()=>{
   const {run}=app();

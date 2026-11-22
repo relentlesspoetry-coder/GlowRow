@@ -74,6 +74,7 @@
     .check-line input {accent-color:#a6eccb;width:20px;height:20px; margin:0;flex-shrink:0;}
     .dialog-actions {display:flex; justify-content:flex-end; gap:9px; flex-wrap:wrap; margin-top:20px;}
     .action {border-radius:12px;min-height:45px;padding:11px 18px;background:#293a4e;color:#eff6ff;font-weight:760;}
+    a.action {display:inline-flex;align-items:center;text-decoration:none;}
     .action.primary {background:var(--accent);color:#063328;}
     .project-list {display:flex; flex-direction:column;gap:8px; margin:16px 0;}
     .project-item {border:1px solid #3b4d61;border-radius:12px; display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px;}
@@ -119,8 +120,8 @@
     </button>
   </section>
 
-  <section class="board-card" aria-label="Pattern grid with current diagonal in color">
-    <div class="board-top"><span class="indicator"><span class="indicator-dot"></span> ACTIVE DIAGONAL ONLY</span><span id="boardDimension">15 × 15</span></div>
+  <section class="board-card" aria-label="Faded pattern grid with the current diagonal highlighted">
+    <div class="board-top"><span class="indicator"><span class="indicator-dot"></span> ACTIVE DIAGONAL HIGHLIGHTED</span><span id="boardDimension">15 × 15</span></div>
     <div class="board-holder"><canvas id="patternCanvas" width="900" height="900" role="img" aria-label="Active crochet row on a 15 by 15 pixel grid"></canvas></div>
     <p class="board-hint">Swipe left or right on the grid to change rows</p>
   </section>
@@ -148,7 +149,8 @@
     <p>Choose the corner where your first crochet square begins.</p>
     <div class="field"><label for="startCorner">Start crocheting from</label><select id="startCorner"><option value="tl">Top left ↘</option><option value="br">Bottom right ↖</option><option value="tr">Top right ↙</option><option value="bl">Bottom left ↗</option></select><p class="field-hint">Changing the starting corner resets the current row to 1.</p></div>
     <div class="field"><label class="check-line"><input id="showStrip" type="checkbox" checked> Show row color squares below the grid</label></div>
-    <div class="dialog-actions"><button class="action primary" id="saveSettings">Save settings</button></div>
+    <div class="dialog-actions"><a class="action" href="https://glowrow.invalid/native/check-for-updates">Check for updates</a>
+      <button class="action primary" id="saveSettings">Save settings</button></div>
   </div>
 </div>
 
@@ -210,9 +212,25 @@ function drawPattern(){
   const CELL=26, W=p.width*CELL,H=p.height*CELL;
   if (canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}
   canvas.style.aspectRatio=`${p.width} / ${p.height}`;
-  canvas.setAttribute('aria-label',`Row ${p.row} of ${total(p)}. ${p.width} by ${p.height} pattern. Only the active diagonal is in color.`);
-  ctx.fillStyle='#05090e';ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle='#1b2532';ctx.lineWidth=0.85;
+  canvas.setAttribute('aria-label',`Row ${p.row} of ${total(p)}. ${p.width} by ${p.height} pattern. Current diagonal in full color, other stitches faded.`);
+  ctx.globalAlpha=1;
+  ctx.fillStyle='#35414f';ctx.fillRect(0,0,W,H);
+  // Paint the original colors over a soft slate base so even black stitches stay visible.
+  // Combine neighboring cells of the same color to keep large charts responsive.
+  ctx.globalAlpha=0.42;
+  for(let r=0;r<p.height;r++){
+    const row=p.pixels[r];
+    for(let c=0;c<p.width;){
+      const color=row[c];
+      let end=c+1;
+      while(end<p.width&&row[end]===color)end++;
+      ctx.fillStyle=color;
+      ctx.fillRect(c*CELL,r*CELL,(end-c)*CELL,CELL);
+      c=end;
+    }
+  }
+  ctx.globalAlpha=1;
+  ctx.strokeStyle='#303a48';ctx.lineWidth=0.85;
   ctx.beginPath();
   for(let c=0;c<=p.width;c++){const x=c*CELL+.5;ctx.moveTo(x,0);ctx.lineTo(x,H);}
   for(let r=0;r<=p.height;r++){const y=r*CELL+.5;ctx.moveTo(0,y);ctx.lineTo(W,y);}
