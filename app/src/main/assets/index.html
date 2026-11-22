@@ -256,20 +256,21 @@
     <p>Choose an image and preview its squares. You can add a border to reach a finished size before saving.</p>
     <div class="field"><label for="importFile">Pattern image</label><input type="file" id="importFile" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/*"></div>
     <div class="field"><label for="importName">Pattern name</label><input type="text" id="importName" maxlength="60" placeholder="My crochet pattern"></div>
-    <div class="field"><label for="importMode">Image type</label><select id="importMode" aria-describedby="importModeHint"><option value="chart">Crochet chart or screenshot (with grid lines)</option><option value="pixel">Plain pixel art (no grid lines)</option></select><div id="importModeHint" class="field-hint"></div></div>
+    <div class="field"><label for="importMode">Original stitch grid</label><select id="importMode" aria-describedby="importModeHint"><option value="chart">Image has grid lines: count them automatically</option><option value="pixel">No grid lines: enter the original stitch count</option></select><div id="importModeHint" class="field-hint"></div></div>
+    <label class="check-line" id="importManualLine"><input type="checkbox" id="importManual"> Enter the original stitch count myself</label>
+    <div class="field-row hidden" id="importDimensions"><div class="field"><label for="importCols">Original stitches across</label><input id="importCols" type="number" min="2" max="150" inputmode="numeric" placeholder="Across"></div><div class="field"><label for="importRows">Original stitches down</label><input id="importRows" type="number" min="2" max="150" inputmode="numeric" placeholder="Down"></div></div>
+    <div id="importDimensionsHint" class="field-hint"></div>
     <details id="importAdjust" class="hidden">
-      <summary>Adjust grid or crop</summary>
-      <label class="check-line" id="importManualLine"><input type="checkbox" id="importManual"> Enter the chart size myself</label>
+      <summary>Crop image or adjust grid guides</summary>
       <label class="check-line" id="importGuidesLine"><input type="checkbox" id="importGuides"> Ignore thin red guide lines</label>
-      <div class="field-row hidden" id="importDimensions"><div class="field"><label for="importCols">Squares across</label><input id="importCols" type="number" min="2" max="150" inputmode="numeric" placeholder="Across"></div><div class="field"><label for="importRows">Squares down</label><input id="importRows" type="number" min="2" max="150" inputmode="numeric" placeholder="Down"></div></div>
-      <div id="importDimensionsHint" class="field-hint"></div>
       <div class="field"><label>Image crop (optional)</label><div class="crop-box"><canvas id="cropCanvas" width="480" height="300" aria-label="Drag to select the part of the image to import"></canvas></div><div class="field-hint">Drag from one corner to the opposite corner. For a manual chart import, select exactly the outer grid, leaving out titles and numbers.</div><button class="small-btn" id="resetCrop" style="margin-top:9px">Use whole image</button></div>
     </details>
     <div id="importError" class="error" role="alert"></div>
     <p id="importStatus" class="import-status" role="status" aria-live="polite"></p>
     <section id="importReview" class="hidden" aria-labelledby="importReviewTitle">
-      <h3 id="importReviewTitle">Pattern preview</h3>
-      <label class="check-line"><input type="checkbox" id="importAddBorder"> Add a border to reach a finished size</label>
+      <h3 id="importReviewTitle">Review the original stitch count</h3>
+      <p id="importReviewDetail" role="status"></p>
+      <label class="check-line"><input type="checkbox" id="importAddBorder"> Optional: add a border to reach a finished size</label>
       <div id="importBorderFields" class="hidden">
         <div class="field-row">
           <div class="field"><label for="importFinishedWidth">Finished width (stitches)</label><input id="importFinishedWidth" type="number" max="150" step="1" inputmode="numeric"></div>
@@ -282,7 +283,6 @@
         <figure><figcaption>Selected source area</figcaption><div class="import-review-image"><canvas id="importSourceCanvas" role="img" aria-label="Source image area used for this preview"></canvas></div></figure>
         <figure><figcaption id="importPreviewCaption">Converted squares</figcaption><div class="import-review-image"><canvas id="importPreviewCanvas" role="img"></canvas></div></figure>
       </div>
-      <p id="importReviewDetail"></p>
       <p id="importFinishedDetail" class="hidden" role="status"></p>
       <label class="check-line"><input type="checkbox" id="importVerified"> The preview has the square count and colors I want.</label>
     </section>
@@ -381,7 +381,8 @@ const GlowRowImport = (() => {
     return rails.filter(r=>r.hi-r.lo+1<=(end-start)*.04);
   }
 
-  function gridFit(runs, start,end) {
+  const compatible=(a,b)=>!b||abs(a-b)/Math.max(a,b)<=.13;
+  function gridFit(runs, start,end,expectedPitch) {
     if(runs.length<6 || runs.length>220)return null;
     let best=null, competing=null;
     const distinct=(a,b)=>a.found[0].mid>b.found[b.found.length-1].mid || b.found[0].mid>a.found[a.found.length-1].mid || abs(a.pitch-b.pitch)>Math.max(1.5,a.pitch*.20);
@@ -407,6 +408,7 @@ const GlowRowImport = (() => {
         const cells=found.length-1;
         if(cells<5||cells>150)continue;
         const pitch=(last.mid-seed.mid)/cells;
+        if(!compatible(pitch,expectedPitch))continue;
         const firstWidth=seed.hi-seed.lo+1, lastWidth=last.hi-last.lo+1;
         const railWidths=found.map(r=>r.hi-r.lo+1);
         if(railWidths.some(w=>w>pitch*.35)||firstWidth>pitch*.35||lastWidth>pitch*.35)continue;
@@ -436,25 +438,181 @@ const GlowRowImport = (() => {
     return best;
   }
 
-  function detect(image,box) {
-    const axis=(vertical,start,end)=>{
-      const stable=gridFit(lineRuns(image,box,vertical),start,end);
-      if(stable&&stable.score>.91)return stable;
-      const sharp=gridFit(contrastRuns(image,box,vertical,6),start,end);
-      if(sharp&&sharp.score>.91)return sharp;
-      const mixed=gridFit(contrastRuns(image,box,vertical,-16),start,end);
-      // A partial band of solid-color rails isn't the complete chart if local
-      // contrast shows a substantially longer, equally regular grid.
-      const best=[stable,sharp,mixed].filter(Boolean).sort((a,b)=>b.score-a.score)[0];
-      return mixed===best&&(!sharp||mixed.score>sharp.score+.035)?mixed:(sharp&&sharp.score>(stable?stable.score:0)+.035?sharp:stable||sharp||mixed);
+  // Rescaling can erase a few rail centers without erasing the periodic
+  // grid. Fit a bounded series with strong observed neighbors on each side;
+  // missing slots may be interpolation only, never inferred outer boundaries.
+  function interpolatedFit(runs,start,end,expectedPitch) {
+    if(runs.length<8||runs.length>220)return null;
+    const votes=new Map();
+    for(let i=1;i<runs.length;i++){
+      const d=runs[i].mid-runs[i-1].mid;
+      for(let k=1;k<=3;k++){
+        const p=Math.round(2*d/k)/2;
+        if(p>=4&&p<=(end-start)/5)votes.set(p,(votes.get(p)||0)+(k===1?3:1));
+      }
+    }
+    const steps=[...votes].sort((a,b)=>b[1]-a[1]).slice(0,16).map(([p])=>p);
+    const matches=[];
+    for(let seedIndex=0;seedIndex<runs.length-7;seedIndex++){
+      const seed=runs[seedIndex];
+      for(const step of steps){
+        const found=[{index:0,rail:seed}];
+        let last=found[0];
+        for(let i=seedIndex+1;i<runs.length;i++){
+          const rail=runs[i];
+          const pitch=last.index>=4?(last.rail.mid-seed.mid)/last.index:step;
+          const index=Math.round((rail.mid-seed.mid)/pitch);
+          if(index<=last.index)continue;
+          if(index>150||index-last.index>3)break;
+          const residual=abs(rail.mid-(seed.mid+index*pitch));
+          if(residual>Math.max(1.5,pitch*.19))continue;
+          if(abs((rail.mid-seed.mid)/index-step)>Math.max(.8,step*.10))continue;
+          found.push({index,rail});last=found[found.length-1];
+        }
+        const cells=last.index;
+        const missing=cells+1-found.length;
+        if(cells<7||missing<1||missing/(cells+1)>.22)continue;
+        const pitch=(last.rail.mid-seed.mid)/cells;
+        if(!compatible(pitch,expectedPitch))continue;
+        if(found.some(({rail})=>rail.hi-rail.lo+1>pitch*.42))continue;
+        const coverage=(last.rail.mid-seed.mid)/(end-start);
+        if(coverage<.75)continue;
+        const jitter=found.reduce((a,{index,rail})=>a+abs(rail.mid-(seed.mid+index*pitch)),0)/found.length;
+        if(jitter>Math.max(1.1,pitch*.08))continue;
+        const observed=new Map(found.map(({index,rail})=>[index,rail]));
+        const rails=Array.from({length:cells+1},(_,i)=>{
+          if(observed.has(i))return observed.get(i);
+          const mid=seed.mid+i*pitch,line=Math.round(mid);
+          return {mid,lo:line,hi:line};
+        });
+        const score=coverage*(1-Math.min(.13,jitter/pitch))-.22*missing/(cells+1);
+        matches.push({found:rails,pitch,score});
+      }
+    }
+    matches.sort((a,b)=>b.score-a.score);
+    const best=matches[0];
+    if(!best)return null;
+    if(matches.some(m=>m.score>best.score*.95&&abs(m.pitch-best.pitch)/best.pitch>.13))return null;
+    return best;
+  }
+
+  // Require the perpendicular grid to continue across the terminal strip.
+  // A margin, label, or sparse stray marks do not supply repeated cell edges.
+  function continues(image,vertical,from,to,other) {
+    const rails=other.found.slice(1,-1);
+    if(rails.length<4||to-from<1)return false;
+    const gap=Math.max(2,Math.min(4,Math.round(other.pitch*.19)));
+    const lum=(p,q)=>{
+      const n=rgbCode(image.data,image.width,vertical?p:q,vertical?q:p);
+      return ((n>>16)+((n>>8)&255)+(n&255))/3;
     };
-    const X=axis(true,box.l,box.r);
-    const Y=axis(false,box.t,box.b);
-    if(!X||!Y || abs(X.pitch-Y.pitch)/Math.max(X.pitch,Y.pitch)>.13)return null;
-    // Don't treat a visibly unfinished repeat as a credible count.
-    const outside = (rails,start,end,pitch) => Math.max(rails[0].mid-start,end-1-rails[rails.length-1].mid)/pitch;
-    if(outside(X.found,box.l,box.r,X.pitch)>4||outside(Y.found,box.t,box.b,Y.pitch)>4)return null;
-    return {X:X.found,Y:Y.found};
+    let dark=0,light=0;
+    for(const rail of rails){
+      const q=Math.round(rail.mid);
+      let d=0,l=0;
+      for(const f of [.27,.52,.77]){
+        const p=Math.round(from+(to-1-from)*f);
+        const left=lum(p,q-gap),right=lum(p,q+gap);
+        // Allow weak-rail JPEG centers to move by a pixel.
+        for(let shift=-1;shift<=1;shift++){
+          const mid=lum(p,q+shift),a=left-mid,b=right-mid;
+          if((a+b>24&&Math.min(a,b)>-12)||(a+b>5&&Math.min(a,b)>1)){d++;break;}
+          if((a+b < -24&&Math.max(a,b)<12)||(a+b < -5&&Math.max(a,b)<-1)){l++;break;}
+        }
+      }
+      if(d>=2)dark++;
+      if(l>=2)light++;
+    }
+    return Math.max(dark,light)>=Math.ceil(rails.length*.65);
+  }
+
+  function blankMargin(image,vertical,edge,other,pitch) {
+    const rails=other.found;
+    const length=edge.to-edge.from;
+    if(length<1)return true;
+    const offset=Math.min(length-1,Math.max(1,Math.round(Math.min(length*.32,pitch*.17))));
+    const positions=edge.low?[edge.to-1-offset,edge.to-1]:[edge.from+offset,edge.from];
+    for(const p of positions){
+      const buckets=new Map(); let top=0;
+      for(let i=0;i<rails.length-1;i++){
+        const q=Math.round((rails[i].mid+rails[i+1].mid)/2);
+        const color=bucket(rgbCode(image.data,image.width,vertical?p:q,vertical?q:p));
+        const n=(buckets.get(color)||0)+1;buckets.set(color,n);top=Math.max(top,n);
+      }
+      if(top>=Math.ceil((rails.length-1)*.9))return true;
+    }
+    return false;
+  }
+
+  function completeEdges(image,box,vertical,fit,other) {
+    const rails=fit.found.slice(), first=rails[0],last=rails[rails.length-1],pitch=fit.pitch;
+    const start=vertical?box.l:box.t,end=vertical?box.r:box.b;
+    const inferred=[];
+    for(const edge of [
+      {low:true, available:first.mid-start, from:start,to:first.lo},
+      {low:false, available:end-1-last.mid, from:last.hi+1,to:end}
+    ]){
+      const fraction=edge.available/pitch;
+      if(edge.to-edge.from<=1)continue; // antialiasing sliver immediately outside the observed rail
+      const carriesGrid=continues(image,vertical,edge.from,edge.to,other);
+      const flat=blankMargin(image,vertical,edge,other,pitch);
+      if(!carriesGrid){
+        // A plain paper margin is harmless, but a strip containing real
+        // stitch colors is ambiguous rather than permission to discard it.
+        if(!flat)return null;
+        continue;
+      }
+      // Near a whole pitch, far-extending printed guides on a uniform
+      // margin can look like an added cell. Don't infer these as stitches.
+      if(fraction>=.94&&flat)return null;
+      // One near-complete edge cell may be visible without its boundary.
+      // If a wider/shorter continuation could hold another count, don't guess.
+      if(fraction<.78||fraction>1.10 || rails.length<6||rails.length>150)return null;
+      const limit=edge.low?start:end-1;
+      const inferredRail={mid:limit,lo:limit,hi:limit};
+      if(edge.low)rails.unshift(inferredRail); else rails.push(inferredRail);
+      inferred.push(vertical?(edge.low?'left':'right'):(edge.low?'top':'bottom'));
+    }
+    return {rails,inferred};
+  }
+
+  function detect(image,box) {
+    const axis=(vertical,start,end,expectedPitch)=>{
+      const stable=gridFit(lineRuns(image,box,vertical),start,end,expectedPitch);
+      if(stable&&stable.score>.91)return stable;
+      const sharpRuns=contrastRuns(image,box,vertical,6);
+      const mixedRuns=contrastRuns(image,box,vertical,-16);
+      const fitByPolarity=runs=>[1,2].flatMap(color=>{
+        const same=runs.filter(run=>run.color===color);
+        const continuous=gridFit(same,start,end,expectedPitch);
+        return continuous&&continuous.score>.96?[continuous]:[continuous,interpolatedFit(same,start,end,expectedPitch)];
+      });
+      // Dark grid centers and bright JPEG halos are different features.
+      // Never assemble a rail sequence by hopping between contrast polarities.
+      return [stable,...fitByPolarity(sharpRuns),...fitByPolarity(mixedRuns)]
+        .filter(Boolean).sort((a,b)=>b.score-a.score)[0]||null;
+    };
+    let X=axis(true,box.l,box.r),Y=axis(false,box.t,box.b);
+    if(!X||!Y||!compatible(X.pitch,Y.pitch)){
+      // Both axes must independently show rails at the same pitch; the
+      // stronger axis can disambiguate a 2×/3× harmonic of the weaker one.
+      // Never replace an already observed finer period by its integer
+      // multiple just to make axes agree; that would merge real stitches.
+      const coarser=(known,target)=>{
+        const ratio=target/known, multiple=Math.round(ratio);
+        return multiple>=2&&abs(ratio-multiple)<.14*multiple;
+      };
+      const retryX=Y&&(!X||!coarser(X.pitch,Y.pitch))?axis(true,box.l,box.r,Y.pitch):null;
+      const retryY=X&&(!Y||!coarser(Y.pitch,X.pitch))?axis(false,box.t,box.b,X.pitch):null;
+      if(!retryX&&!retryY)return null;
+      if(retryX&&(!retryY||retryX.score+Y.score>=X.score+retryY.score))X=retryX;
+      else Y=retryY;
+    }
+    const outside=(fit,start,end)=>Math.max(fit.found[0].mid-start,end-1-fit.found[fit.found.length-1].mid)/fit.pitch;
+    if(outside(X,box.l,box.r)>4||outside(Y,box.t,box.b)>4)return null;
+    const x=completeEdges(image,box,true,X,Y),y=completeEdges(image,box,false,Y,X);
+    if(!x||!y)return null;
+    return {X:x.rails,Y:y.rails,inferredEdges:[...x.inferred,...y.inferred]};
   }
 
   function choose(values, ignoreRedGuides) {
@@ -557,7 +715,7 @@ const GlowRowImport = (() => {
     const detectedBounds=rails?{
       l:rails.X[0].lo,r:rails.X[rails.X.length-1].hi+1,t:rails.Y[0].lo,b:rails.Y[rails.Y.length-1].hi+1
     }:box;
-    return {colors:isChart&&opts.compressPalette===true?consolidatePalette(colors):colors,...dims,method:rails?'detected':'manual',bounds:normalized(detectedBounds,w,h)};
+    return {colors:isChart&&opts.compressPalette===true?consolidatePalette(colors):colors,...dims,method:rails?'detected':'manual',bounds:normalized(detectedBounds,w,h),inferredEdges:rails?rails.inferredEdges:[]};
   }
   return {analyze};
 })();
@@ -815,11 +973,11 @@ const fullImportCrop=()=>({x:0,y:0,w:1,h:1});
 let sourceImage=null,sourceIsJpeg=false,crop=fullImportCrop(),dragStart=null,cropBeforeDrag=null,importResult=null,importFinal=null,importBorderInitialized=false,importReadToken=0,analysisBusy=false,importRevision=0;
 function importFields(){
   const chart=$('importMode').value==='chart',manual=chart&&$('importManual').checked;
-  $('importModeHint').textContent=chart?'GlowRow looks for the grid and counts its squares.':'No lines to count. Enter the size you want to crochet.';
+  $('importModeHint').textContent=chart?'Use for a chart, screenshot, or photo with lines between the squares.':'Enter how many stitches make up the picture before adding a border.';
   $('importManualLine').classList.toggle('hidden',!chart);
   $('importGuidesLine').classList.toggle('hidden',!chart);
   $('importDimensions').classList.toggle('hidden',chart&&!manual);
-  $('importDimensionsHint').textContent=manual?'Use the full count of columns and rows and select the chart edges below.':'';
+  $('importDimensionsHint').textContent=manual?'Count only the original chart. If the image includes labels or margins, crop to the outside edges of the grid.':'';
 }
 function invalidateImport(){
   importRevision++;
@@ -864,7 +1022,6 @@ $('importFile').addEventListener('change',async function(){
   finally{URL.revokeObjectURL(url);}
 });
 $('importMode').addEventListener('change',()=>{
-  $('importAdjust').open=$('importMode').value==='pixel';
   importFields();invalidateImport();
 });
 $('importManual').addEventListener('change',()=>{
@@ -961,9 +1118,11 @@ function showImportPreview(result,mode){
     origCtx.drawImage(sourceImage,bounds.x*sourceImage.naturalWidth,bounds.y*sourceImage.naturalHeight,sw,sh,0,0,original.width,original.height);
   }
   const {width,height,colors,method}=result;
-  const detail=method==='detected'?'Grid detected automatically.':mode==='chart'?'Grid placed using the size and crop you entered. Check the edges carefully.':'Resized to the square count you entered.';
+  const detail=method==='detected'?'Grid detected automatically.':mode==='chart'?'Grid placed using the size and crop you entered. Check the edges carefully.':'Resized to the square count you entered (before any border).';
+  const inferred=(Array.isArray(result.inferredEdges)?result.inferredEdges:[]).filter(edge=>['top','right','bottom','left'].includes(edge));
+  const edgeNote=inferred.length?` Includes visible edge stitches where the outer grid line is clipped (${inferred.join(', ')}).`:'';
   const paletteNote=mode==='chart'&&sourceIsJpeg?' Very similar JPEG shades are grouped to reduce image noise.':'';
-  $('importReviewDetail').textContent=`Original: ${width} across × ${height} down · ${new Set(colors.flat()).size} colors. ${detail}${paletteNote}`;
+  $('importReviewDetail').textContent=`Original: ${width} across × ${height} down · ${new Set(colors.flat()).size} colors. ${detail}${edgeNote}${paletteNote}`;
   $('importFinishedWidth').min=width;$('importFinishedHeight').min=height;
   if(!importBorderInitialized||!$('importAddBorder').checked){
     $('importFinishedWidth').value=Math.max(30,width);$('importFinishedHeight').value=Math.max(30,height);
@@ -985,8 +1144,7 @@ $('previewPattern').addEventListener('click',async ()=>{
   const dimensions=mode==='pixel'||useManual;
   const cols=Number($('importCols').value),rows=Number($('importRows').value),valid=n=>Number.isInteger(n)&&n>=2&&n<=150;
   if(dimensions&&!(valid(cols)&&valid(rows))){
-    $('importAdjust').open=true;
-    $('importError').textContent='Enter 2–150 squares across and down.';
+    $('importError').textContent='Enter 2–150 squares across and down for the original pattern, before adding a border.';
     $(valid(cols)?'importRows':'importCols').focus();return;
   }
   const options={mode,crop,useManual,ignoreRedGuides:$('importGuides').checked,compressPalette:mode==='chart'&&sourceIsJpeg,...(dimensions?{cols,rows}:{})};
@@ -1001,7 +1159,10 @@ $('previewPattern').addEventListener('click',async ()=>{
     if(result.method==='needs-input'){
       $('importStatus').textContent='';
       $('importAdjust').open=true;
-      $('importError').textContent=result.reason||'The grid could not be counted reliably. Try cropping to the chart or enter the square count yourself.';
+      const reason=result.reason||'The original grid could not be counted reliably.';
+      $('importError').textContent=mode==='chart'&&!useManual
+        ?`${reason} For a manual count, select “Enter the original stitch count myself” above.`
+        :reason;
       return;
     }
     if(!valid(result.width)||!valid(result.height)||!Array.isArray(result.colors)||result.colors.length!==result.height||

@@ -128,7 +128,7 @@ test('uncertain chart detection cannot save; manual or plain mode needs entered 
   run("sourceImage={naturalWidth:50,naturalHeight:80}; invalidateImport();");
   await element('previewPattern').events.click();
   assert.equal(element('importAdjust').open,true);
-  assert.equal(element('importError').textContent,'Could not count the printed grid.');
+  assert.match(element('importError').textContent,/Could not count the printed grid.*Enter the original stitch count myself/);
   assert.equal(element('createPattern').disabled,true);
   element('importManual').checked=true;
   element('importManual').events.change();
@@ -418,4 +418,44 @@ test('import border defaults respect source sizes above thirty and toggling off 
   assert.equal(element('createPattern').disabled,true);
   assert.equal(element('importFinishedDetail').classList.contains('hidden'),true);
   assert.deepEqual(evaluate('[importFinal.width,importFinal.height]'),[42,20]);
+});
+
+test('import asks for original stitch counts before any optional finished size',()=>{
+  const {element}=app();
+  const originalFields=html.indexOf('id="importDimensions"');
+  assert.ok(originalFields>=0&&originalFields<html.indexOf('id="importAdjust"'));
+  assert.ok(html.indexOf('id="importReviewDetail"')<html.indexOf('id="importAddBorder"'));
+  assert.match(html,/Original stitches across.*Original stitches down/);
+  element('newPattern').events.click();
+  assert.equal(element('importDimensions').classList.contains('hidden'),true);
+  element('importManual').checked=true;element('importManual').events.change();
+  assert.equal(element('importDimensions').classList.contains('hidden'),false);
+  assert.equal(element('importAdjust').open,false);
+  element('importMode').value='pixel';element('importMode').events.change();
+  assert.match(element('importModeHint').textContent,/before adding a border/);
+  assert.equal(element('importDimensions').classList.contains('hidden'),false);
+  assert.equal(element('importReview').classList.contains('hidden'),true);
+});
+
+test('an ambiguous auto count stays unsavable even if the analyzer returns suggested dimensions',async()=>{
+  const {element,run}=app(undefined,()=>({method:'needs-input',width:24,height:17,reason:'Could not confirm the outer grid cells.'}));
+  element('newPattern').events.click();
+  run('sourceImage={naturalWidth:336,naturalHeight:237}; invalidateImport();');
+  await element('previewPattern').events.click();
+  assert.match(element('importError').textContent,/outer grid cells.*original stitch count/i);
+  assert.equal(element('createPattern').disabled,true);
+  assert.equal(element('importReview').classList.contains('hidden'),true);
+  assert.equal(element('importCols').value,'');
+  assert.equal(element('importRows').value,'');
+});
+
+test('exposes clipped boundary recovery and keeps a 25×18 source separate from a 30×30 finish',()=>{
+  const {element,run,evaluate}=app();
+  element('newPattern').events.click();
+  run("showImportPreview({width:25,height:18,colors:Array.from({length:18},()=>Array(25).fill('#dddddd')),method:'detected',inferredEdges:['bottom']},'chart')");
+  assert.match(element('importReviewDetail').textContent,/25 across × 18 down.*clipped \(bottom\)/);
+  element('importAddBorder').checked=true;element('importAddBorder').events.change();
+  assert.match(element('importFinishedDetail').textContent,/30 × 30 stitches.*top 6, right 3, bottom 6, left 2/);
+  assert.deepEqual(evaluate('[importResult.width,importResult.height]'),[25,18]);
+  assert.deepEqual(evaluate('[importFinal.width,importFinal.height]'),[30,30]);
 });
