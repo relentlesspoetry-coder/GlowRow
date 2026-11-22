@@ -20,14 +20,14 @@ function app(storage = new Map(), analyze, imageData) {
         values:new Set(), contains(t){return this.values.has(t);}, add(t){this.values.add(t);}, remove(t){this.values.delete(t);},
         toggle(t,show){ if(show)this.add(t);else this.remove(t); }
       },
-      setAttribute(){}, focus(){}, scrollIntoView(){}, getContext(){return ctx;}, appendChild(node){this.children.push(node);},
+      setAttribute(){}, focus(){document.activeElement=this;}, getClientRects(){return [1];}, scrollIntoView(){}, getContext(){return ctx;}, appendChild(node){this.children.push(node);},
       replaceChildren(){this.children=[];},
       addEventListener(event, fn){this.events[event]=fn;}, append(...nodes){nodes.forEach(node=>this.appendChild(node));},
     });
     return elements.get(id);
   }
   const document = {
-    getElementById:element, createElement:()=>element(Symbol()), addEventListener(){},
+    getElementById:element, createElement:()=>element(Symbol()), events:{}, addEventListener(type,fn){this.events[type]=fn;},
     querySelectorAll:()=>Array.from(elements.values()).filter(el=>el.classList.values.has('open')),
   };
   document.querySelector=()=>document.querySelectorAll()[0];
@@ -37,7 +37,7 @@ function app(storage = new Map(), analyze, imageData) {
   if(!analyze)vm.runInContext(html.match(/<script id="gridImportCore">([\s\S]*?)<\/script>/)[1],realm);
   vm.runInContext(script,realm);
   const evaluate=code=>JSON.parse(vm.runInContext(`JSON.stringify(${code})`,realm));
-  return {evaluate, element,paint,run:code=>vm.runInContext(code,realm)};
+  return {document,evaluate, element,paint,run:code=>vm.runInContext(code,realm)};
 }
 test('every corner covers each cell once for a rectangular pattern',()=>{
   const {evaluate}=app();
@@ -258,4 +258,40 @@ test('near-color JPEG cleanup is requested only for printed charts',async()=>{
   run('sourceIsJpeg=false;');
   await element('previewPattern').events.click();
   assert.deepEqual(modes,[['chart',true],['pixel',false],['chart',false]]);
+});
+
+test('fits the full rectangular chart to measured board size without stretching cells',()=>{
+  const corner='br', width=150,height=50;
+  const storage=new Map([['c2c-crochet-v1',JSON.stringify({activeId:'fixture',projects:[{
+    id:'fixture',name:'Wide chart',width,height,row:1,corner,
+    pixels:Array.from({length:height},()=>Array(width).fill('#123456')),
+  }]})]]);
+  const {element,run}=app(storage);
+  const holder=element('boardHolder'),canvas=element('patternCanvas');
+  function fit(width,height){holder.clientWidth=width;holder.clientHeight=height;run('fitPatternCanvas()');return [parseFloat(canvas.style.width),parseFloat(canvas.style.height)];}
+  assert.deepEqual(fit(360,540),[360,120]);
+  assert.deepEqual(fit(900,160),[480,160]);
+  assert.deepEqual(fit(0,0),[480,160]);
+  assert.equal(canvas.width,150*26);
+  assert.equal(canvas.height,50*26);
+  run("current().width=50;current().height=150;current().pixels=Array.from({length:150},()=>Array(50).fill('#345678')); drawPattern();");
+  assert.deepEqual(fit(240,360),[120,360]);
+});
+
+test('modal focus wraps within the dialog and Escape returns it to the viewer trigger',()=>{
+  const {document,element}=app(),trigger=element('openSettings'),modal=element('settingsModal');
+  const first=element('dialogClose'),last=element('saveSettings');
+  modal.querySelectorAll=()=>[first,last];
+  trigger.focus();trigger.events.click();
+  assert.equal(document.activeElement,first);
+  assert.equal(element('viewerApp').inert,true);
+  const key=(key,shiftKey=false)=>{
+    let prevented=false;document.events.keydown({key,shiftKey,preventDefault(){prevented=true;}});
+    assert.ok(prevented);
+  };
+  key('Tab',true);assert.equal(document.activeElement,last);
+  key('Tab');assert.equal(document.activeElement,first);
+  key('Escape');
+  assert.equal(document.activeElement,trigger);
+  assert.equal(element('viewerApp').inert,false);
 });

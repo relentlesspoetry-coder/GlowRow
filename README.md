@@ -17,7 +17,7 @@ Requires Android 8.0 (API 26) or a compatible Fire OS version and an enabled sys
 - Compare the preview with the selected image area. Check the square count and colors before confirming and tapping **Save pattern**. If detection is unsure or the result doesn’t match, open **Adjust grid or crop**, crop to the chart edges, and choose **Enter the chart size myself**. A straight-on image or screenshot usually works better than an angled photo.
 - For an image with no grid lines, select **Plain pixel art** and enter the number of squares across and down before previewing.
 - New patterns start at **Bottom Right**. To change the starting corner, open **Settings**. GlowRow remembers your choice for future patterns and keeps each saved pattern’s own corner and progress.
-- Use **Next**, **Previous**, or swipe the grid. Tap the row counter to jump to a specific row.
+- GlowRow fits the full grid to the screen in portrait and landscape, keeping the row counter and **Previous** / **Next** controls visible while you crochet. Tap the row counter to jump to a row, or swipe the grid to move one row at a time.
 - Patterns, stitch colors, and progress stay on this device. No account or advertising. The viewer and crochet work offline. Uninstalling or clearing app data deletes local patterns and progress.
 
 ## Build from source
