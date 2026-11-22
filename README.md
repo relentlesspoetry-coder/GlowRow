@@ -5,7 +5,7 @@ GlowRow is an offline corner-to-corner (C2C) crochet companion for Android and F
 ## Install on an Android or Fire tablet
 
 1. Download **GlowRow.apk** from this repository’s Releases page.
-2. Open the downloaded file. If the tablet blocks installation, Fire OS or Android may ask you to allow the browser or Files app to install this download. You can turn that setting off again after installation.
+2. Open the downloaded file and follow the tablet’s normal installation prompts. If the browser or tablet flags the file as harmful, stop instead of overriding the warning.
 3. Open GlowRow and try the bundled Mint Diamond pattern.
 
 Requires Android 8.0 (API 26) or a compatible Fire OS version and an enabled system WebView. Individual Fire tablet models have not been certified.
@@ -36,9 +36,9 @@ The script verifies signing and alignment and prints the SHA-256 of `dist/GlowRo
 
 ## Updates
 
-If you installed v1.0.0, download the v1.1.0 `GlowRow.apk` from GitHub and open it on the tablet **without uninstalling GlowRow**. The app name, package, and signer are unchanged, so Android can upgrade it in place and keep your patterns.
+If you already installed an older build, keep it installed to preserve your patterns. If your tablet permits the upgrade through its normal installation flow, open the current release APK without uninstalling GlowRow first. Do not turn off device protections or override a harmful-app warning.
 
-From v1.1.0 onward, open **Settings → Check for updates**. The viewer stays offline; only this button uses the internet to check the public GlowRow GitHub repository. GlowRow asks before downloading, verifies the downloaded package and its release certificate, and hands it to Android’s installer. Android may first ask permission to install updates from GlowRow. You then approve or decline in Android’s own installer. There are no background checks or silent installations. If offline or rate-limited, wait and try again, or use the GitHub Releases page.
+From v1.1.1 onward, open **Settings → Check for updates**. Only this button uses the internet, to read release information from the public GlowRow repository. If an update is available, choose **Open GitHub** to see its release page in your browser. GlowRow itself does not download or install apps. The browser and tablet keep their normal download and installation checks. There are no background checks. If you are offline or GitHub is limiting requests, wait and try again. Continue crocheting offline any time.
 
 ### Publishing an update
 
@@ -54,4 +54,4 @@ javac -d build/trust-tests app/src/main/java/com/glowrow/app/UpdateTrust.java te
 java -cp build/trust-tests com.glowrow.app.UpdateTrustTest
 ```
 
-Optionally pass the release signing certificate (public DER only) to the test runner to exercise accepted packages and rejected downgrades, wrong package IDs, and wrong release tags.
+These tests check version ordering, rejected tags, and the fixed official release-page destination.

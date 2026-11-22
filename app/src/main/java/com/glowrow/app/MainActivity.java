@@ -89,8 +89,6 @@ public final class MainActivity extends Activity {
         if (request == PICK_PATTERN) {
             Uri image = result == RESULT_OK && data != null ? data.getData() : null;
             finishPicker(image != null && "content".equals(image.getScheme()) ? image : null);
-        } else if (request == Updates.ENABLE_INSTALL) {
-            updates.returnedFromSettings();
         }
     }
 
