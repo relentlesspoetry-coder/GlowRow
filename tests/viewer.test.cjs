@@ -350,3 +350,72 @@ test('saving a border leaves the original active if storage is full',()=>{
   assert.match(element('borderError').textContent,/original pattern has not changed/);
   assert.equal(element('borderModal').classList.contains('open'),true);
 });
+
+test('Add a pattern previews and saves only the final 30×30 copy with true border stitches',()=>{
+  const storage=new Map(),{element,run,evaluate}=app(storage);
+  element('newPattern').events.click();
+  element('importName').value='Chart with border';
+  run(`showImportPreview({width:23,height:22,colors:Array.from({length:22},(_,y)=>Array.from({length:23},(_,x)=>x===8&&y===8?'#abcdef':'#123456')),method:'detected'},'chart')`);
+  assert.equal(element('importAddBorder').checked,false);
+  assert.equal(element('importFinishedWidth').value,30);
+  assert.equal(element('importFinishedHeight').value,30);
+  assert.equal(element('importBorderColor').value,'#123456');
+  assert.match(element('importReviewDetail').textContent,/Original: 23 across × 22 down/);
+  element('importVerified').checked=true;element('importVerified').events.change();
+  element('importAddBorder').checked=true;element('importAddBorder').events.change();
+  assert.equal(element('importVerified').checked,false);
+  assert.match(element('importFinishedDetail').textContent,/Finished: 30 × 30 stitches · 59 diagonal rows.*top 4, right 4, bottom 4, left 3/);
+  element('importVerified').checked=true;element('importVerified').events.change();
+  element('importFinishedWidth').value=22;element('importFinishedWidth').events.input();
+  assert.equal(element('createPattern').disabled,true);
+  assert.equal(element('importVerified').disabled,true);
+  assert.equal(element('importBorderError').classList.contains('hidden'),false);
+  element('createPattern').events.click();
+  assert.equal(storage.size,0);
+  element('importFinishedWidth').value=30;element('importFinishedWidth').events.input();
+  element('importVerified').checked=true;element('importVerified').events.change();
+  element('importBorderColor').value='#fedcba';element('importBorderColor').events.input();
+  assert.equal(element('createPattern').disabled,true);
+  element('importVerified').checked=true;element('importVerified').events.change();
+  element('createPattern').events.click();
+  assert.equal(evaluate("state.projects.filter(p=>p.name==='Chart with border').length"),1);
+  const result=evaluate('current()');
+  assert.deepEqual([result.width,result.height,result.row,result.corner],[30,30,1,'br']);
+  assert.equal(result.pixels[12][11],'#abcdef');
+  assert.equal(result.pixels.flat().filter(p=>p==='#fedcba').length,394);
+});
+
+test('cancelling an acknowledged padded import or failing storage never creates an unpadded record',()=>{
+  const storage=new Map();
+  const {element,run,evaluate}=app(storage);
+  const setup=()=>{
+    element('newPattern').events.click();
+    run("showImportPreview({width:2,height:2,colors:[['#101010','#202020'],['#303030','#404040']],method:'detected'},'chart')");
+    element('importAddBorder').checked=true;element('importAddBorder').events.change();
+    element('importVerified').checked=true;element('importVerified').events.change();
+  };
+  setup();
+  run("closeModal('importModal')");
+  element('createPattern').events.click();
+  assert.equal(storage.size,0);
+  setup();
+  storage.set=()=>{throw Error('Storage quota');};
+  element('createPattern').events.click();
+  assert.equal(evaluate('state.projects.length'),1);
+  assert.equal(evaluate('[importFinal.width, importFinal.height]').join('x'),'30x30');
+  assert.match(element('importError').textContent,/existing patterns have not changed/);
+});
+
+test('import border defaults respect source sizes above thirty and toggling off restores original preview',()=>{
+  const {element,run,evaluate}=app();
+  element('newPattern').events.click();
+  run("showImportPreview({width:42,height:20,colors:Array.from({length:20},()=>Array(42).fill('#223344')),method:'detected'},'chart')");
+  element('importAddBorder').checked=true;element('importAddBorder').events.change();
+  assert.equal(element('importFinishedWidth').value,42);
+  assert.equal(element('importFinishedHeight').value,30);
+  element('importVerified').checked=true;element('importVerified').events.change();
+  element('importAddBorder').checked=false;element('importAddBorder').events.change();
+  assert.equal(element('createPattern').disabled,true);
+  assert.equal(element('importFinishedDetail').classList.contains('hidden'),true);
+  assert.deepEqual(evaluate('[importFinal.width,importFinal.height]'),[42,20]);
+});

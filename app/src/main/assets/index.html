@@ -86,7 +86,7 @@
     .project-buttons button.delete {color:var(--danger);}
     .crop-box {border:1px solid #546477;border-radius:12px;overflow:hidden;max-height:245px;display:flex;justify-content:center;background:#080e17;}
     .crop-box canvas {max-width:100%;max-height:245px;width:auto;height:auto;object-fit:contain; touch-action:none; display:block;cursor:crosshair;}
-    #borderColor {width:65px;padding:4px;}
+    #importBorderColor,#borderColor {width:65px;padding:4px;}
     #borderPreviewTitle {font-size:16px;margin:12px 0 8px;}
     #borderCanvas {image-rendering:pixelated;}
     .error {font-size:13px;color:#ffb3bb;min-height:18px;margin-top:8px;}
@@ -96,6 +96,8 @@
     #importAdjust .field-row {margin-top:10px;}
     .import-status:empty {display:none;}
     #importReview {margin-top:12px;padding:12px;border:1px solid #3a4b61;border-radius:11px;}
+    #importBorderFields {border:1px solid #3a4b61;border-radius:8px;padding:0 10px;margin-top:8px;}
+    #importReview .import-review-pair {margin-top:12px;}
     #importReview h3 {margin:0 0 10px;font-size:16px;}
     .import-review-pair {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
     .import-review-pair figure {margin:0;min-width:0;}
@@ -251,7 +253,7 @@
 <div class="scrim" id="importModal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
   <div class="dialog">
     <div class="dialog-head"><h2 id="importTitle">Add a pattern</h2><button class="dialog-close" data-close="importModal" aria-label="Close">×</button></div>
-    <p>Choose an image, then check the converted squares before saving.</p>
+    <p>Choose an image and preview its squares. You can add a border to reach a finished size before saving.</p>
     <div class="field"><label for="importFile">Pattern image</label><input type="file" id="importFile" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/*"></div>
     <div class="field"><label for="importName">Pattern name</label><input type="text" id="importName" maxlength="60" placeholder="My crochet pattern"></div>
     <div class="field"><label for="importMode">Image type</label><select id="importMode" aria-describedby="importModeHint"><option value="chart">Crochet chart or screenshot (with grid lines)</option><option value="pixel">Plain pixel art (no grid lines)</option></select><div id="importModeHint" class="field-hint"></div></div>
@@ -267,12 +269,22 @@
     <p id="importStatus" class="import-status" role="status" aria-live="polite"></p>
     <section id="importReview" class="hidden" aria-labelledby="importReviewTitle">
       <h3 id="importReviewTitle">Pattern preview</h3>
+      <label class="check-line"><input type="checkbox" id="importAddBorder"> Add a border to reach a finished size</label>
+      <div id="importBorderFields" class="hidden">
+        <div class="field-row">
+          <div class="field"><label for="importFinishedWidth">Finished width (stitches)</label><input id="importFinishedWidth" type="number" max="150" step="1" inputmode="numeric"></div>
+          <div class="field"><label for="importFinishedHeight">Finished height (stitches)</label><input id="importFinishedHeight" type="number" max="150" step="1" inputmode="numeric"></div>
+        </div>
+        <div class="field"><label for="importBorderColor">Border yarn color</label><input id="importBorderColor" type="color"><div class="field-hint">The original stitches stay the same. Extra border stitches go on the right or bottom.</div></div>
+        <p id="importBorderError" class="error hidden" role="alert"></p>
+      </div>
       <div class="import-review-pair">
         <figure><figcaption>Selected source area</figcaption><div class="import-review-image"><canvas id="importSourceCanvas" role="img" aria-label="Source image area used for this preview"></canvas></div></figure>
-        <figure><figcaption>Converted squares</figcaption><div class="import-review-image"><canvas id="importPreviewCanvas" role="img"></canvas></div></figure>
+        <figure><figcaption id="importPreviewCaption">Converted squares</figcaption><div class="import-review-image"><canvas id="importPreviewCanvas" role="img"></canvas></div></figure>
       </div>
       <p id="importReviewDetail"></p>
-      <label class="check-line"><input type="checkbox" id="importVerified"> The square count and colors match my pattern.</label>
+      <p id="importFinishedDetail" class="hidden" role="status"></p>
+      <label class="check-line"><input type="checkbox" id="importVerified"> The preview has the square count and colors I want.</label>
     </section>
     <div class="dialog-actions"><button class="action" data-close="importModal">Cancel</button><button class="action" id="previewPattern" disabled>Preview pattern</button><button class="action primary hidden" id="createPattern" disabled>Save pattern</button></div>
   </div>
@@ -800,7 +812,7 @@ $('saveBorder').addEventListener('click',()=>{
   render();closeModal('borderModal');
 });
 const fullImportCrop=()=>({x:0,y:0,w:1,h:1});
-let sourceImage=null,sourceIsJpeg=false,crop=fullImportCrop(),dragStart=null,cropBeforeDrag=null,importResult=null,importReadToken=0,analysisBusy=false,importRevision=0;
+let sourceImage=null,sourceIsJpeg=false,crop=fullImportCrop(),dragStart=null,cropBeforeDrag=null,importResult=null,importFinal=null,importBorderInitialized=false,importReadToken=0,analysisBusy=false,importRevision=0;
 function importFields(){
   const chart=$('importMode').value==='chart',manual=chart&&$('importManual').checked;
   $('importModeHint').textContent=chart?'GlowRow looks for the grid and counts its squares.':'No lines to count. Enter the size you want to crochet.';
@@ -811,7 +823,7 @@ function importFields(){
 }
 function invalidateImport(){
   importRevision++;
-  importResult=null;
+  importResult=null;importFinal=null;
   $('importVerified').checked=false;
   $('importReview').classList.add('hidden');
   $('createPattern').classList.add('hidden');
@@ -828,10 +840,11 @@ $('newPattern').addEventListener('click',()=>{
   $('importAdjust').classList.add('hidden');
   $('importManual').checked=false;
   $('importGuides').checked=false;
+  $('importAddBorder').checked=false;importBorderInitialized=false;
   importFields();invalidateImport();openModal('importModal');
 });
 $('importFile').addEventListener('change',async function(){
-  const token=++importReadToken,file=this.files&&this.files[0];sourceImage=null;crop=fullImportCrop();dragStart=null;analysisBusy=false;
+  const token=++importReadToken,file=this.files&&this.files[0];sourceImage=null;importBorderInitialized=false;$('importAddBorder').checked=false;crop=fullImportCrop();dragStart=null;analysisBusy=false;
   $('importAdjust').classList.add('hidden');invalidateImport();
   if(!file)return;
   if(file.size>25*1024*1024){$('importError').textContent='Image is too large (25 MB maximum).';return;}
@@ -894,11 +907,51 @@ function readImportImage(image){
   const ctx=cv.getContext('2d',{willReadFrequently:true});ctx.imageSmoothingEnabled=false;ctx.fillStyle='#ffffff';ctx.fillRect(0,0,cv.width,cv.height);ctx.drawImage(image,0,0,cv.width,cv.height);
   return ctx.getImageData(0,0,cv.width,cv.height);
 }
+function renderImportFinal(){
+  if(!importResult)return;
+  importFinal=null;
+  $('importVerified').checked=false;
+  $('importVerified').disabled=true;
+  $('createPattern').disabled=true;
+  const enabled=$('importAddBorder').checked;
+  $('importBorderFields').classList.toggle('hidden',!enabled);
+  $('importBorderError').classList.add('hidden');
+  $('importFinishedDetail').classList.add('hidden');
+  const source={width:importResult.width,height:importResult.height,pixels:importResult.colors};
+  const pending=enabled
+    ?buildBorder(source,Number($('importFinishedWidth').value),Number($('importFinishedHeight').value),$('importBorderColor').value)
+    :source;
+  const canvas=$('importPreviewCanvas');
+  canvas.classList.toggle('hidden',!pending);
+  $('importPreviewCaption').textContent=enabled?'Finished pattern':'Converted squares';
+  if(!pending){
+    $('importBorderError').textContent=source.width===150&&source.height===150
+      ?'The original is already at the 150 × 150 stitch limit. Turn off the border to save it.'
+      :`Enter a finished size at least ${source.width} × ${source.height}, no more than 150 per side, and larger on at least one axis.`;
+    $('importBorderError').classList.remove('hidden');
+    return;
+  }
+  importFinal=pending;
+  const {width,height,pixels}=pending,cell=Math.max(2,Math.floor(280/Math.max(width,height)));
+  canvas.width=width*cell;canvas.height=height*cell;
+  canvas.setAttribute('aria-label',`Pattern preview: ${width} squares across, ${height} squares down`);
+  const ctx=canvas.getContext('2d');
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){ctx.fillStyle=pixels[y][x];ctx.fillRect(x*cell,y*cell,cell,cell);}
+  if(enabled){
+    const {top,right,bottom,left}=pending;
+    if(typeof ctx.setLineDash==='function'){
+      ctx.lineWidth=1.5;ctx.setLineDash([4,4]);
+      const x=left*cell+.75,y=top*cell+.75,w=source.width*cell-1.5,h=source.height*cell-1.5;
+      ctx.strokeStyle='#10141c';ctx.strokeRect(x,y,w,h);
+      ctx.lineDashOffset=4;ctx.strokeStyle='#f7fbff';ctx.strokeRect(x,y,w,h);
+    }
+    $('importFinishedDetail').textContent=`Finished: ${width} × ${height} stitches · ${width+height-1} diagonal rows. Border: top ${top}, right ${right}, bottom ${bottom}, left ${left}. The dotted outline is for preview only.`;
+    $('importFinishedDetail').classList.remove('hidden');
+  }
+  $('importVerified').disabled=false;
+}
 function showImportPreview(result,mode){
   importResult=result;
-  const canvas=$('importPreviewCanvas'),{width,height,colors,method}=result,cell=Math.max(2,Math.floor(280/Math.max(width,height)));
-  canvas.width=width*cell;canvas.height=height*cell;
-  canvas.setAttribute('aria-label',`Imported pattern preview: ${width} squares across, ${height} squares down`);
   const original=$('importSourceCanvas'), bounds=result.bounds||crop;
   if(sourceImage){
     const sw=bounds.w*sourceImage.naturalWidth,sh=bounds.h*sourceImage.naturalHeight,ratio=280/Math.max(sw,sh);
@@ -907,16 +960,24 @@ function showImportPreview(result,mode){
     origCtx.fillStyle='#ffffff';origCtx.fillRect(0,0,original.width,original.height);
     origCtx.drawImage(sourceImage,bounds.x*sourceImage.naturalWidth,bounds.y*sourceImage.naturalHeight,sw,sh,0,0,original.width,original.height);
   }
-  const ctx=canvas.getContext('2d');
-  for(let y=0;y<height;y++)for(let x=0;x<width;x++){ctx.fillStyle=colors[y][x];ctx.fillRect(x*cell,y*cell,cell,cell);}
+  const {width,height,colors,method}=result;
   const detail=method==='detected'?'Grid detected automatically.':mode==='chart'?'Grid placed using the size and crop you entered. Check the edges carefully.':'Resized to the square count you entered.';
   const paletteNote=mode==='chart'&&sourceIsJpeg?' Very similar JPEG shades are grouped to reduce image noise.':'';
-  $('importReviewDetail').textContent=`${width} across × ${height} down · ${new Set(colors.flat()).size} colors. ${detail}${paletteNote}`;
+  $('importReviewDetail').textContent=`Original: ${width} across × ${height} down · ${new Set(colors.flat()).size} colors. ${detail}${paletteNote}`;
+  $('importFinishedWidth').min=width;$('importFinishedHeight').min=height;
+  if(!importBorderInitialized||!$('importAddBorder').checked){
+    $('importFinishedWidth').value=Math.max(30,width);$('importFinishedHeight').value=Math.max(30,height);
+    $('importBorderColor').value=edgeColor({width,height,pixels:colors});
+    importBorderInitialized=true;
+  }
   $('importReview').classList.remove('hidden');
   $('createPattern').classList.remove('hidden');
+  renderImportFinal();
   $('importStatus').textContent='Preview ready. Compare it with the original before saving.';
   $('importReview').scrollIntoView({block:'nearest'});
 }
+$('importAddBorder').addEventListener('change',renderImportFinal);
+for(const id of ['importFinishedWidth','importFinishedHeight','importBorderColor'])$(id).addEventListener('input',renderImportFinal);
 $('previewPattern').addEventListener('click',async ()=>{
   if(!sourceImage||analysisBusy||dragStart)return;
   invalidateImport();
@@ -952,10 +1013,10 @@ $('previewPattern').addEventListener('click',async ()=>{
     $('importError').textContent='Could not build a preview. Try a straight-on image or a PNG or JPG screenshot.';
   }finally{if(token===importReadToken){analysisBusy=false;$('previewPattern').disabled=!sourceImage;}}
 });
-$('importVerified').addEventListener('change',()=>{$('createPattern').disabled=!importResult||!$('importVerified').checked;});
+$('importVerified').addEventListener('change',()=>{$('createPattern').disabled=!importFinal||!$('importVerified').checked;});
 $('createPattern').addEventListener('click',()=>{
-  if(!importResult||!$('importVerified').checked)return;
-  const {width,height,colors:pixels}=importResult;
+  if(!importFinal||!$('importVerified').checked||!$('importModal').classList.contains('open'))return;
+  const {width,height,pixels}=importFinal;
   const name=$('importName').value.trim().slice(0,60)||'New pattern';
   const p={id:`p-${Date.now()}-${Math.random().toString(36).slice(2,9)}`,name,width,height,pixels,row:1,corner:state.defaultCorner};
   const next={...state,projects:[...state.projects,p],activeId:p.id};
