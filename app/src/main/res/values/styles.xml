@@ -1,0 +1,9 @@
+<resources>
+    <string name="app_name">GlowRow</string>
+    <style name="GlowRowTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#0D141E</item>
+        <item name="android:statusBarColor">#0D141E</item>
+        <item name="android:navigationBarColor">#0D141E</item>
+        <item name="android:colorAccent">#82E6AE</item>
+    </style>
+</resources>

@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src blob: data:; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1018">
+  <meta name="color-scheme" content="dark">
+  <title>GlowRow</title>
+  <style>
+    :root { --bg:#0b1018; --surface:#151d29; --panel:#111823; --stroke:#273244; --text:#f4f7fb; --muted:#a3afc0; --accent:#b9f9d8; --accent-ink:#07352b; --danger:#ffafb6; --radius:18px; }
+    * { box-sizing:border-box; }
+    html,body {margin:0; min-height:100%; background:var(--bg); color:var(--text); font-family:system-ui,-apple-system,Roboto,"Segoe UI",sans-serif; -webkit-tap-highlight-color:transparent; }
+    button,input,select {font:inherit;}
+    button {cursor:pointer; border:0; -webkit-user-select:none; user-select:none;}
+    button:focus-visible, input:focus-visible, select:focus-visible {outline:3px solid var(--accent); outline-offset:3px;}
+    .app { max-width:1200px; margin:0 auto; min-height:100dvh; padding:calc(14px + env(safe-area-inset-top)) clamp(15px,3vw,32px) calc(15px + env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:14px; }
+    .topbar {display:flex; justify-content:space-between; align-items:center; gap:16px; min-height:55px;}
+    .brand {display:flex; align-items:center; gap:12px; min-width:0;}
+    .logo {width:40px; height:40px; border:1px solid #496253; border-radius:12px; background:#173a31; display:grid; place-items:center; flex-shrink:0;}
+    .logo svg {width:26px; height:26px;}
+    h1 {font-size:clamp(18px,2.2vw,23px); letter-spacing:-.035em; margin:0; font-weight:750; line-height:1.15;}
+    .sub {color:var(--muted);font-size:12px;margin:3px 0 0;}
+    .top-actions {display:flex; gap:8px; flex-wrap:nowrap;}
+    .outline-btn,.small-btn {background:#192230; color:#ebf1f8; border:1px solid #313e50; padding:11px 15px; border-radius:11px; font-weight:650; white-space:nowrap;}
+    .outline-btn:active,.small-btn:active {background:#29384a;}
+    .icon-btn {display:grid; place-items:center; width:45px; height:45px; padding:0;}
+    .icon-btn svg {width:21px; height:21px;}
+    .summary {display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:12px; background:var(--surface); border:1px solid var(--stroke); border-radius:var(--radius); padding:15px clamp(15px,2vw,24px); }
+    .eyebrow {font-size:11px; font-weight:750; letter-spacing:.115em; text-transform:uppercase; color:var(--muted); margin:0 0 3px;}
+    .pattern-title {font-size:clamp(17px,2vw,23px); font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin:0;}
+    .pattern-detail {font-size:12px;color:var(--muted);margin:5px 0 0;}
+    .count-box {min-width:147px; text-align:right;}
+    .count-line {display:flex; justify-content:flex-end; align-items:baseline; gap:6px;}
+    .count-current {font-size:clamp(30px,4.8vw,49px);line-height:1.05;font-weight:800;letter-spacing:-.055em; font-variant-numeric:tabular-nums;}
+    .count-divider,.count-total {color:#bdc8d6; font-size:clamp(18px,2.4vw,25px);font-variant-numeric:tabular-nums;}
+    .progress-track {height:5px;border-radius:99px;background:#303d4d;overflow:hidden;margin-top:12px;}
+    .progress-fill {height:100%;width:1.6%;background:var(--accent);border-radius:99px;transition:width .2s ease;}
+    .board-card {display:flex; flex-direction:column; align-items:center; flex:1; min-height:0; gap:10px; padding:clamp(10px,2vw,18px); background:#0e151e; border:1px solid var(--stroke); border-radius:var(--radius);}
+    .board-top {width:100%; display:flex;align-items:center;justify-content:space-between;gap:10px; color:#98a8bb;font-size:12px; font-weight:650;}
+    .board-top .indicator {display:inline-flex; gap:7px; align-items:center;}
+    .indicator-dot {height:8px;width:8px; border-radius:50%; background:var(--accent);}
+    .board-holder {width:100%; flex:1; display:flex;align-items:center;justify-content:center; min-height:200px;}
+    canvas#patternCanvas {max-width:100%; max-height:min(62dvh,750px); width:auto; height:auto; object-fit:contain; touch-action:pan-y; border:1px solid #2c3747; background:#05080d; box-shadow:0 4px 22px #0004; display:block; }
+    .board-hint {color:#8fa0b5; font-size:12px; text-align:center;margin:0;}
+    .navigation {display:grid; grid-template-columns:minmax(0,1fr) minmax(80px,.70fr) minmax(0,1fr); gap:12px; align-items:center;}
+    .nav-btn {min-height:68px; border-radius:14px; background:#1c2735; border:1px solid #354457; color:#fff; font-size:clamp(16px,2.2vw,21px); font-weight:800; display:flex; align-items:center; justify-content:center; gap:10px;}
+    .nav-btn.primary {background:var(--accent); color:var(--accent-ink); border-color:transparent;}
+    .nav-btn:disabled {opacity:.36; cursor:default;}
+    .nav-btn:not(:disabled):active {transform:translateY(1px); filter:brightness(.9);}
+    .nav-center {text-align:center;}
+    .nav-center .stitch-count {font-size:clamp(18px,2.5vw,23px);font-weight:780;font-variant-numeric:tabular-nums;}
+    .nav-center .label {font-size:12px;color:var(--muted);margin-top:3px;}
+    .strip {background:#111a25;border:1px solid #233044;border-radius:13px;padding:12px 15px;display:flex; gap:14px;align-items:center;min-height:70px;}
+    .strip-heading {color:#b6c4d4; font-size:12px; font-weight:700; flex-shrink:0; width:96px;}
+    .swatches {display:flex;align-items:center;gap:5px; flex:1; overflow-x:auto; padding:2px 1px 5px; scrollbar-width:thin; }
+    .swatch {height:29px; min-width:29px; border-radius:6px; flex:0 0 29px; border:1px solid #8994a5; position:relative;}
+    .swatch[title]:hover {transform:translateY(-2px);}
+    .swatch.black {box-shadow:inset 0 0 0 1px #ffffffaa;}
+    .strip-legend {flex:0 0 auto; color:#9cabbc;font-size:11px;}
+    .scrim {position:fixed;inset:0;background:rgba(0,0,0,.74);display:none;z-index:50;align-items:center;justify-content:center;padding:15px;}
+    .scrim.open {display:flex;}
+    .dialog {width:min(610px,100%);max-height:min(92dvh,1000px);overflow:auto; background:#192332;border:1px solid #3a4b61;border-radius:19px; padding:21px; box-shadow:0 25px 100px #0009;}
+    .dialog h2 {margin:0;font-size:24px;letter-spacing:-.03em;}
+    .dialog p {color:#afbed0;line-height:1.45;font-size:14px;}
+    .dialog-head {display:flex; justify-content:space-between; align-items:center; gap:15px;}
+    .dialog-close {width:39px;height:39px;border-radius:11px;background:#27364a;color:#fff;font-size:23px;}
+    .field {margin:16px 0;}
+    .field label {font-size:13px;display:block;margin:0 0 8px;font-weight:700;color:#e5ebf4;}
+    .field input,.field select {width:100%;min-height:45px;padding:10px 12px; background:#0e1621;border:1px solid #475a70;color:white;border-radius:11px;}
+    .field-hint {font-size:12px;color:#a5b4c6;margin-top:7px;}
+    .field-row {display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+    .check-line {display:flex;gap:10px;align-items:flex-start;line-height:1.3;cursor:pointer;}
+    .check-line input {accent-color:#a6eccb;width:20px;height:20px; margin:0;flex-shrink:0;}
+    .dialog-actions {display:flex; justify-content:flex-end; gap:9px; flex-wrap:wrap; margin-top:20px;}
+    .action {border-radius:12px;min-height:45px;padding:11px 18px;background:#293a4e;color:#eff6ff;font-weight:760;}
+    .action.primary {background:var(--accent);color:#063328;}
+    .project-list {display:flex; flex-direction:column;gap:8px; margin:16px 0;}
+    .project-item {border:1px solid #3b4d61;border-radius:12px; display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px;}
+    .project-item.selected {border-color:var(--accent); background:#233931;}
+    .project-info {min-width:0;flex:1;}
+    .project-info strong {display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    .project-info small {display:block;color:#adc0d2;margin-top:3px;}
+    .project-buttons {display:flex;gap:6px;}
+    .project-buttons button {padding:9px 11px;background:#304258;border-radius:8px;color:white;font-weight:650;}
+    .project-buttons button.delete {color:var(--danger);}
+    .crop-box {border:1px solid #546477;border-radius:12px;overflow:hidden;max-height:245px;display:flex;justify-content:center;background:#080e17;}
+    .crop-box canvas {max-width:100%;max-height:245px;width:auto;height:auto;object-fit:contain; touch-action:none; display:block;cursor:crosshair;}
+    .error {font-size:13px;color:#ffb3bb;min-height:18px;margin-top:8px;}
+    .hidden {display:none!important;}
+    @media (max-width:640px) { .app{gap:11px;} .summary {padding:13px;} .count-box{min-width:110px;} .board-holder{min-height:220px;} canvas#patternCanvas{max-height:54dvh;} .nav-btn {min-height:61px;gap:4px;font-size:15px;} .strip-heading{width:65px;} .strip-legend{display:none;} .outline-btn{padding:11px 10px;} }
+    @media (max-height:640px) and (min-width:700px) { .app{gap:8px;} .summary{padding:8px 13px;} .board-card{padding:8px;} canvas#patternCanvas{max-height:48dvh;} .nav-btn{min-height:47px;} .strip{min-height:53px;padding:8px 12px;} .topbar{min-height:45px;} }
+    @media (prefers-reduced-motion:reduce) {.progress-fill{transition:none;} .nav-btn:active{transform:none;} }
+  </style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="logo" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="#c4ffdf" stroke-width="2"><path d="M4 4h5v5H4zM10 10h5v5h-5zM16 16h4v4h-4zM15 4h5v5h-5zM4 16h5v4H4z"/></svg></div>
+      <div><h1>GlowRow</h1><p class="sub">Diagonal row viewer</p></div>
+    </div>
+    <div class="top-actions">
+      <button id="openProjects" class="outline-btn">Patterns</button>
+      <button id="openSettings" class="outline-btn icon-btn" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 17h16M9 4v6M15 14v6"/></svg></button>
+    </div>
+  </header>
+
+  <section class="summary" aria-label="Current crochet row">
+    <div style="min-width:0">
+      <p class="eyebrow">CURRENT PATTERN</p>
+      <p id="patternTitle" class="pattern-title">Mint Diamond • Practice</p>
+      <p id="patternDetail" class="pattern-detail">15 × 15 · Diagonal crochet</p>
+      <div class="progress-track" aria-label="Pattern progress"><div id="progressBar" class="progress-fill"></div></div>
+    </div>
+    <button class="count-box" id="jumpRow" style="background:transparent;color:inherit;padding:0;cursor:pointer" aria-label="Jump to a specific row" title="Tap to jump to a row">
+      <p class="eyebrow" style="text-align:right">ROW</p>
+      <div class="count-line"><span class="count-current" id="currentRow">1</span><span class="count-divider">/</span><span class="count-total" id="totalRows">29</span></div>
+    </button>
+  </section>
+
+  <section class="board-card" aria-label="Pattern grid with current diagonal in color">
+    <div class="board-top"><span class="indicator"><span class="indicator-dot"></span> ACTIVE DIAGONAL ONLY</span><span id="boardDimension">15 × 15</span></div>
+    <div class="board-holder"><canvas id="patternCanvas" width="900" height="900" role="img" aria-label="Active crochet row on a 15 by 15 pixel grid"></canvas></div>
+    <p class="board-hint">Swipe left or right on the grid to change rows</p>
+  </section>
+
+  <nav class="navigation" aria-label="Change crochet row">
+    <button class="nav-btn" id="previousRow" aria-label="Previous diagonal row"><span aria-hidden="true">←</span> Previous</button>
+    <div class="nav-center"><div class="stitch-count" id="stitchCount">1 stitch</div><div class="label">in this row</div></div>
+    <button class="nav-btn primary" id="nextRow" aria-label="Next diagonal row">Next <span aria-hidden="true">→</span></button>
+  </nav>
+  <div class="strip" id="colorStrip"><span class="strip-heading">Row colors</span><div class="swatches" id="swatches" aria-label="Row stitches in crochet order"></div><span class="strip-legend">Each square = 1 stitch</span></div>
+</div>
+
+<div class="scrim" id="projectsModal" role="dialog" aria-modal="true" aria-labelledby="projectsTitle">
+  <div class="dialog">
+    <div class="dialog-head"><h2 id="projectsTitle">Your patterns</h2><button class="dialog-close" data-close="projectsModal" aria-label="Close">×</button></div>
+    <p>Patterns and row progress are saved on this tablet. No account or internet needed.</p>
+    <div class="project-list" id="projectList"></div>
+    <div class="dialog-actions"><button class="action" data-close="projectsModal">Done</button><button class="action primary" id="newPattern">+ Add a pattern</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+  <div class="dialog">
+    <div class="dialog-head"><h2 id="settingsTitle">Pattern settings</h2><button class="dialog-close" data-close="settingsModal" aria-label="Close">×</button></div>
+    <p>Choose the corner where your first crochet square begins.</p>
+    <div class="field"><label for="startCorner">Start crocheting from</label><select id="startCorner"><option value="tl">Top left ↘</option><option value="br">Bottom right ↖</option><option value="tr">Top right ↙</option><option value="bl">Bottom left ↗</option></select><p class="field-hint">Changing the starting corner resets the current row to 1.</p></div>
+    <div class="field"><label class="check-line"><input id="showStrip" type="checkbox" checked> Show row color squares below the grid</label></div>
+    <div class="dialog-actions"><button class="action primary" id="saveSettings">Save settings</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="importModal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
+  <div class="dialog">
+    <div class="dialog-head"><h2 id="importTitle">Add a pattern</h2><button class="dialog-close" data-close="importModal" aria-label="Close">×</button></div>
+    <p>Choose a pixel-art image or a screenshot of a crochet grid. For chart screenshots, crop to the grid only.</p>
+    <div class="field"><label for="importFile">Pattern image</label><input type="file" id="importFile" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/*"></div>
+    <div class="field"><label for="importName">Pattern name</label><input type="text" id="importName" maxlength="60" placeholder="My crochet pattern"></div>
+    <div class="field-row"><div class="field"><label for="importCols">Squares across</label><input id="importCols" type="number" min="2" max="150" value="30" inputmode="numeric"></div><div class="field"><label for="importRows">Squares down</label><input id="importRows" type="number" min="2" max="150" value="30" inputmode="numeric"></div></div>
+    <div class="field"><label class="check-line"><input id="gridChartMode" type="checkbox"> Image contains printed grid lines (chart/screenshot)</label><div class="field-hint">This mode samples inside each square and attempts to ignore red guide lines.</div></div>
+    <div id="cropArea" class="hidden"><div class="field"><label>Crop to the actual pattern</label><div class="crop-box"><canvas id="cropCanvas" width="480" height="300" aria-label="Drag to crop the image to the pattern grid"></canvas></div><div class="field-hint">Draw a rectangle over the grid (exclude row numbers and titles). Tap “Reset crop” if needed.</div><button class="small-btn" id="resetCrop" style="margin-top:9px">Reset crop</button></div></div>
+    <div id="importError" class="error" role="alert"></div>
+    <div class="dialog-actions"><button class="action" data-close="importModal">Cancel</button><button class="action primary" id="createPattern">Create pattern</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="jumpModal" role="dialog" aria-modal="true" aria-labelledby="jumpTitle"><div class="dialog" style="max-width:420px"><div class="dialog-head"><h2 id="jumpTitle">Jump to a row</h2><button class="dialog-close" data-close="jumpModal" aria-label="Close">×</button></div><div class="field"><label for="jumpInput">Row number</label><input id="jumpInput" type="number" min="1" inputmode="numeric"></div><div class="dialog-actions"><button class="action" data-close="jumpModal">Cancel</button><button class="action primary" id="confirmJump">Go to row</button></div></div></div>
+
+<script>
+'use strict';
+const SAMPLE_PATTERN = {"name": "Mint Diamond \u2022 Practice", "width": 15, "height": 15, "pixels": [["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259"], ["#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259"], ["#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"]]};
+const STORAGE_KEY='c2c-crochet-v1';
+const $=id=>document.getElementById(id);
+const CORNERS=['tl','tr','br','bl'];
+const newSample=()=>({id:'example-mint-diamond',name:SAMPLE_PATTERN.name,width:SAMPLE_PATTERN.width,height:SAMPLE_PATTERN.height,pixels:SAMPLE_PATTERN.pixels,row:1,corner:'tl'});
+const defaults=()=>({activeId:'example-mint-diamond',showStrip:true,projects:[newSample()]});
+function cleanProject(value){
+  if (!value || !Array.isArray(value.pixels)) return null;
+  const w=Number(value.width),h=Number(value.height);
+  if (!Number.isInteger(w)||!Number.isInteger(h)||w<2||h<2||w>150||h>150||value.pixels.length!==h) return null;
+  if (!value.pixels.every(row=>Array.isArray(row)&&row.length===w&&row.every(color=>/^#[0-9a-f]{6}$/i.test(color)))) return null;
+  return {id:String(value.id).slice(0,100),name:String(value.name||'Untitled').slice(0,60),width:w,height:h,pixels:value.pixels,row:Math.min(w+h-1,Math.max(1,Math.floor(Number(value.row)||1))),corner:CORNERS.includes(value.corner)?value.corner:'tl'};
+}
+function loadState(){
+  try {const raw=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');if(raw && Array.isArray(raw.projects)){const projects=raw.projects.map(cleanProject).filter(Boolean);if(projects.length){return {activeId:projects.some(p=>p.id===raw.activeId)?raw.activeId:projects[0].id,showStrip:raw.showStrip!==false,projects};}}}catch(err){console.warn('Could not restore saved project',err);}
+  return defaults();
+}
+let state=loadState();
+function saveState(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify(state));}catch(err){console.warn('Storage unavailable or full',err);alert('Could not save progress on this device. Check available storage.');}}
+const current=()=>state.projects.find(p=>p.id===state.activeId)||state.projects[0];
+const total=p=>p.width+p.height-1;
+// Normalize coordinates to a virtual top-left corner. A constant r+c means one diagonal row.
+function diagonalCells(p,oneBasedRow){
+  const d=oneBasedRow-1,cells=[];
+  for(let r=Math.max(0,d-(p.width-1));r<=Math.min(p.height-1,d);r++){
+    const c=d-r;
+    cells.push({r:p.corner==='bl'||p.corner==='br'?p.height-1-r:r, c:p.corner==='tr'||p.corner==='br'?p.width-1-c:c});
+  }
+  // The working direction naturally alternates from row to row in C2C crochet.
+  if (oneBasedRow%2===0) cells.reverse();
+  return cells;
+}
+function currentCells(){return diagonalCells(current(),current().row);}
+function formatRgb(color){return color.toUpperCase();}
+function isDark(color){const n=parseInt(color.slice(1),16),r=(n>>>16)&255,g=(n>>>8)&255,b=n&255;return 0.2126*r+0.7152*g+0.0722*b<50;}
+function drawPattern(){
+  const p=current(),canvas=$('patternCanvas'),ctx=canvas.getContext('2d',{alpha:false});
+  const CELL=26, W=p.width*CELL,H=p.height*CELL;
+  if (canvas.width!==W||canvas.height!==H){canvas.width=W;canvas.height=H;}
+  canvas.style.aspectRatio=`${p.width} / ${p.height}`;
+  canvas.setAttribute('aria-label',`Row ${p.row} of ${total(p)}. ${p.width} by ${p.height} pattern. Only the active diagonal is in color.`);
+  ctx.fillStyle='#05090e';ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle='#1b2532';ctx.lineWidth=0.85;
+  ctx.beginPath();
+  for(let c=0;c<=p.width;c++){const x=c*CELL+.5;ctx.moveTo(x,0);ctx.lineTo(x,H);}
+  for(let r=0;r<=p.height;r++){const y=r*CELL+.5;ctx.moveTo(0,y);ctx.lineTo(W,y);}
+  ctx.stroke();
+  const cells=currentCells();
+  for(const {r,c} of cells){
+    const x=c*CELL,y=r*CELL,color=p.pixels[r][c];
+    ctx.fillStyle=color;ctx.fillRect(x+1,y+1,CELL-2,CELL-2);
+    ctx.lineWidth=isDark(color)?2.3:1.4;
+    ctx.strokeStyle=isDark(color)?'#d7fae8':'#ecf7f6';
+    ctx.strokeRect(x+1.5,y+1.5,CELL-3,CELL-3);
+  }
+}
+function render(){
+  const p=current(),t=total(p),cells=currentCells();
+  $('patternTitle').textContent=p.name;
+  $('patternDetail').textContent=`${p.width} × ${p.height} · Diagonal crochet`;
+  $('boardDimension').textContent=`${p.width} × ${p.height}`;
+  $('currentRow').textContent=p.row;
+  $('totalRows').textContent=t;
+  $('progressBar').style.width=`${100*p.row/t}%`;
+  $('stitchCount').textContent=`${cells.length} ${cells.length===1?'stitch':'stitches'}`;
+  $('previousRow').disabled=p.row===1;
+  $('nextRow').disabled=p.row===t;
+  $('colorStrip').classList.toggle('hidden',!state.showStrip);
+  const swatches=$('swatches');swatches.replaceChildren();
+  for(let i=0;i<cells.length;i++){
+    const {r,c}=cells[i],color=p.pixels[r][c],el=document.createElement('span');
+    el.className='swatch'+(isDark(color)?' black':'');el.style.backgroundColor=color;el.title=`Stitch ${i+1}: ${formatRgb(color)}`;
+    el.setAttribute('aria-label',el.title);swatches.appendChild(el);
+  }
+  drawPattern();
+}
+function setRow(n){const p=current(),next=Math.min(total(p),Math.max(1,Math.floor(Number(n)||1)));if(p.row===next)return;p.row=next;saveState();render();}
+$('previousRow').addEventListener('click',()=>setRow(current().row-1));
+$('nextRow').addEventListener('click',()=>setRow(current().row+1));
+function openModal(id){document.querySelectorAll('.scrim.open').forEach(el=>el.classList.remove('open'));$(id).classList.add('open');}
+function closeModal(id){$(id).classList.remove('open');}
+document.querySelectorAll('[data-close]').forEach(b=>b.addEventListener('click',()=>closeModal(b.dataset.close)));
+document.querySelectorAll('.scrim').forEach(el=>el.addEventListener('click',e=>{if(e.target===el)el.classList.remove('open');}));
+$('jumpRow').addEventListener('click',()=>{$('jumpInput').max=total(current());$('jumpInput').value=current().row;openModal('jumpModal');$('jumpInput').focus();});
+$('confirmJump').addEventListener('click',()=>{setRow($('jumpInput').value);closeModal('jumpModal');});
+$('jumpInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('confirmJump').click();});
+$('openSettings').addEventListener('click',()=>{$('startCorner').value=current().corner;$('showStrip').checked=state.showStrip;openModal('settingsModal');});
+$('saveSettings').addEventListener('click',()=>{if(current().corner!==$('startCorner').value){current().corner=$('startCorner').value;current().row=1;}state.showStrip=$('showStrip').checked;saveState();render();closeModal('settingsModal');});
+function renderProjects(){const list=$('projectList');list.replaceChildren();for(const p of state.projects){const item=document.createElement('div');item.className='project-item'+(p.id===state.activeId?' selected':'');const info=document.createElement('div');info.className='project-info';const name=document.createElement('strong');name.textContent=p.name;const detail=document.createElement('small');detail.textContent=`${p.width}×${p.height} · Row ${p.row} of ${total(p)}`;info.append(name,detail);const actions=document.createElement('div');actions.className='project-buttons';const open=document.createElement('button');open.textContent=p.id===state.activeId?'Active':'Open';open.disabled=p.id===state.activeId;open.addEventListener('click',()=>{state.activeId=p.id;saveState();render();closeModal('projectsModal');});actions.append(open);if(p.id!=='example-mint-diamond'){const del=document.createElement('button');del.textContent='Delete';del.className='delete';del.addEventListener('click',()=>{if(!confirm(`Delete “${p.name}”? This cannot be undone.`))return;state.projects=state.projects.filter(x=>x.id!==p.id);if(state.activeId===p.id)state.activeId=state.projects[0].id;saveState();render();renderProjects();});actions.append(del);}item.append(info,actions);list.append(item);}}
+$('openProjects').addEventListener('click',()=>{renderProjects();openModal('projectsModal');});
+$('newPattern').addEventListener('click',()=>{$('importFile').value='';$('importName').value='';$('importError').textContent='';$('cropArea').classList.add('hidden');$('gridChartMode').checked=false;sourceImage=null;openModal('importModal');});
+let sourceImage=null,crop={x:0,y:0,w:1,h:1},cropRect=null,dragStart=null;
+$('importFile').addEventListener('change',async function(){
+  const file=this.files&&this.files[0];sourceImage=null;cropRect=null;dragStart=null;
+  $('cropArea').classList.add('hidden');$('importError').textContent='';if(!file)return;
+  if(file.size>25*1024*1024){$('importError').textContent='Image is too large (25 MB maximum).';return;}
+  if(file.type && !file.type.startsWith('image/') && file.type!=='application/octet-stream'){$('importError').textContent='Choose an image file.';return;}
+  const url=URL.createObjectURL(file);
+  try {sourceImage=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Image format could not be opened.'));im.src=url;});
+    if(sourceImage.naturalWidth>12000||sourceImage.naturalHeight>12000)throw Error('Image dimensions are too large.');
+    $('importName').value=file.name.replace(/\.[^.]+$/,'').slice(0,60);
+    crop={x:0,y:0,w:1,h:1};$('cropArea').classList.remove('hidden');drawCrop();
+  }catch(err){sourceImage=null;$('importError').textContent=err.message;}
+  finally{URL.revokeObjectURL(url);}
+});
+function drawCrop(){if(!sourceImage)return;const canvas=$('cropCanvas'),ctx=canvas.getContext('2d');const maxW=520,maxH=245,ratio=Math.min(maxW/sourceImage.naturalWidth,maxH/sourceImage.naturalHeight),W=Math.max(1,Math.round(sourceImage.naturalWidth*ratio)),H=Math.max(1,Math.round(sourceImage.naturalHeight*ratio));canvas.width=W;canvas.height=H;ctx.drawImage(sourceImage,0,0,W,H);ctx.fillStyle='#050b14a6';ctx.fillRect(0,0,W,H);const x=crop.x*W,y=crop.y*H,w=crop.w*W,h=crop.h*H;ctx.drawImage(sourceImage,crop.x*sourceImage.naturalWidth,crop.y*sourceImage.naturalHeight,crop.w*sourceImage.naturalWidth,crop.h*sourceImage.naturalHeight,x,y,w,h);ctx.strokeStyle='#b9f9d8';ctx.lineWidth=3;ctx.strokeRect(x+1.5,y+1.5,w-3,h-3);}
+function cropPosition(e){const el=$('cropCanvas'),rect=el.getBoundingClientRect();return {x:Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width)),y:Math.max(0,Math.min(1,(e.clientY-rect.top)/rect.height))};}
+$('cropCanvas').addEventListener('pointerdown',e=>{if(!sourceImage)return;e.preventDefault();e.target.setPointerCapture(e.pointerId);dragStart=cropPosition(e);});
+$('cropCanvas').addEventListener('pointermove',e=>{if(!dragStart)return;const p=cropPosition(e);cropRect={x:Math.min(dragStart.x,p.x),y:Math.min(dragStart.y,p.y),w:Math.abs(dragStart.x-p.x),h:Math.abs(dragStart.y-p.y)};if(cropRect.w>.025&&cropRect.h>.025){crop=cropRect;drawCrop();}});
+$('cropCanvas').addEventListener('pointerup',e=>{if(!dragStart)return;const p=cropPosition(e);if(Math.abs(dragStart.x-p.x)>.025&&Math.abs(dragStart.y-p.y)>.025){crop={x:Math.min(dragStart.x,p.x),y:Math.min(dragStart.y,p.y),w:Math.abs(dragStart.x-p.x),h:Math.abs(dragStart.y-p.y)};drawCrop();}dragStart=null;cropRect=null;});
+$('cropCanvas').addEventListener('pointercancel',()=>{dragStart=null;cropRect=null;});
+$('resetCrop').addEventListener('click',()=>{crop={x:0,y:0,w:1,h:1};drawCrop();});
+function rgbToHex(v){return '#'+v.map(n=>Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,'0')).join('');}
+function median(values){values.sort((a,b)=>a-b);return values[Math.floor(values.length/2)];}
+function extractGrid(image,width,height,gridMode){
+  const maxDim=1500,scale=Math.min(1,maxDim/Math.max(image.naturalWidth,image.naturalHeight));
+  const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(image.naturalWidth*scale));cv.height=Math.max(1,Math.round(image.naturalHeight*scale));
+  const ctx=cv.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,cv.width,cv.height);
+  const {data}=ctx.getImageData(0,0,cv.width,cv.height);
+  function sample(fx,fy){const x=Math.max(0,Math.min(cv.width-1,Math.floor(fx*cv.width))),y=Math.max(0,Math.min(cv.height-1,Math.floor(fy*cv.height))),o=(y*cv.width+x)*4;return [data[o],data[o+1],data[o+2]];}
+  const pixels=[];
+  for(let row=0;row<height;row++){
+    const line=[];
+    for(let col=0;col<width;col++){
+      let rgb;
+      if(gridMode){
+        const samples=[];
+        for(const [dx,dy] of [[.25,.43],[.43,.25],[.56,.81],[.81,.56],[.33,.43],[.43,.33],[.63,.77],[.77,.63]]){
+          const v=sample(crop.x+((col+dx)/width)*crop.w,crop.y+((row+dy)/height)*crop.h);
+          // Avoid diagonal red guide lines (not necessarily a red pattern color).
+          if(v[0]>125&&v[1]<90&&v[2]<90)continue;
+          samples.push(v);
+        }
+        if(!samples.length)samples.push(sample(crop.x+((col+.5)/width)*crop.w,crop.y+((row+.5)/height)*crop.h));
+        rgb=[0,1,2].map(channel=>median(samples.map(s=>s[channel])));
+        if(Math.max(...rgb)-Math.min(...rgb)<18){const avg=rgb.reduce((a,b)=>a+b,0)/3,v=[0,92,194,229,255].reduce((best,x)=>Math.abs(x-avg)<Math.abs(best-avg)?x:best,255);rgb=[v,v,v];}
+      }else{
+        rgb=sample(crop.x+((col+.5)/width)*crop.w,crop.y+((row+.5)/height)*crop.h);
+      }
+      line.push(rgbToHex(rgb));
+    }
+    pixels.push(line);
+  }
+  return pixels;
+}
+$('createPattern').addEventListener('click',()=>{
+  const err=$('importError');err.textContent='';
+  if(!sourceImage){err.textContent='Choose an image first.';return;}
+  const width=Number($('importCols').value),height=Number($('importRows').value);
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<2||height<2||width>150||height>150){err.textContent='Enter grid dimensions between 2 and 150 squares.';return;}
+  if(crop.w<=0||crop.h<=0){err.textContent='Crop area is empty.';return;}
+  try {
+    const pixels=extractGrid(sourceImage,width,height,$('gridChartMode').checked);
+    const name=$('importName').value.trim().slice(0,60)||'New pattern';
+    const p={id:`p-${Date.now()}-${Math.random().toString(36).slice(2,9)}`,name,width,height,pixels,row:1,corner:current().corner};
+    state.projects.push(p);state.activeId=p.id;saveState();render();closeModal('importModal');
+  }catch(e){console.error(e);err.textContent='Could not read this image. Try another PNG or JPG.';}
+});
+// Swipe gesture on the pattern (no internet, no permissions or account required).
+let touchStart=null;
+$('patternCanvas').addEventListener('touchstart',e=>{if(e.touches.length===1)touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY};else touchStart=null;},{passive:true});
+$('patternCanvas').addEventListener('touchend',e=>{if(!touchStart||!e.changedTouches.length)return;const dx=e.changedTouches[0].clientX-touchStart.x,dy=e.changedTouches[0].clientY-touchStart.y;if(Math.abs(dx)>45&&Math.abs(dx)>Math.abs(dy)*1.5)setRow(current().row+(dx<0?1:-1));touchStart=null;},{passive:true});
+document.addEventListener('keydown',e=>{if(document.querySelector('.scrim.open')){if(e.key==='Escape'){document.querySelector('.scrim.open').classList.remove('open');}return;}if(e.key==='ArrowRight'){e.preventDefault();setRow(current().row+1);}if(e.key==='ArrowLeft'){e.preventDefault();setRow(current().row-1);}});
+render();
+window.glowRowBack = () => {
+  const active = document.querySelector('.scrim.open');
+  if (!active) return false;
+  closeModal(active.id);
+  return true;
+};
+</script>
+</body>
+</html>
