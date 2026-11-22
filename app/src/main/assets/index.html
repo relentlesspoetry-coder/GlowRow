@@ -86,6 +86,9 @@
     .project-buttons button.delete {color:var(--danger);}
     .crop-box {border:1px solid #546477;border-radius:12px;overflow:hidden;max-height:245px;display:flex;justify-content:center;background:#080e17;}
     .crop-box canvas {max-width:100%;max-height:245px;width:auto;height:auto;object-fit:contain; touch-action:none; display:block;cursor:crosshair;}
+    #borderColor {width:65px;padding:4px;}
+    #borderPreviewTitle {font-size:16px;margin:12px 0 8px;}
+    #borderCanvas {image-rendering:pixelated;}
     .error {font-size:13px;color:#ffb3bb;min-height:18px;margin-top:8px;}
     #importAdjust {margin-top:16px;padding:10px 12px;border:1px solid #3a4b61;border-radius:11px;}
     #importAdjust summary {cursor:pointer;font-weight:650;padding:5px 0;}
@@ -210,7 +213,27 @@
     <div class="dialog-head"><h2 id="projectsTitle">Your patterns</h2><button class="dialog-close" data-close="projectsModal" aria-label="Close">×</button></div>
     <p>Patterns and row progress are saved on this tablet. No account or internet needed.</p>
     <div class="project-list" id="projectList"></div>
-    <div class="dialog-actions"><button class="action" data-close="projectsModal">Done</button><button class="action primary" id="newPattern">+ Add a pattern</button></div>
+    <div class="dialog-actions"><button class="action" data-close="projectsModal">Done</button><button class="action" id="openBorder">Add a border</button><button class="action primary" id="newPattern">+ Add a pattern</button></div>
+  </div>
+</div>
+
+<div class="scrim" id="borderModal" role="dialog" aria-modal="true" aria-labelledby="borderTitle">
+  <div class="dialog">
+    <div class="dialog-head"><h2 id="borderTitle">Add a border</h2><button class="dialog-close" data-close="borderModal" aria-label="Close">×</button></div>
+    <p id="borderSource"></p>
+    <div class="field-row">
+      <div class="field"><label for="borderWidth">Finished width (stitches)</label><input id="borderWidth" type="number" max="150" inputmode="numeric" step="1"></div>
+      <div class="field"><label for="borderHeight">Finished height (stitches)</label><input id="borderHeight" type="number" max="150" inputmode="numeric" step="1"></div>
+    </div>
+    <div class="field"><label for="borderColor">Border yarn color</label><input id="borderColor" type="color"><div class="field-hint">Blank border squares are stitches in this color. The image stays at its original size.</div></div>
+    <p id="borderError" class="error hidden" role="alert"></p>
+    <section id="borderPreview" aria-labelledby="borderPreviewTitle">
+      <h3 id="borderPreviewTitle">Finished preview</h3>
+      <div class="import-review-image"><canvas id="borderCanvas" role="img"></canvas></div>
+      <p id="borderCounts" role="status"></p>
+      <div class="field-hint">The dotted outline shows the original image and won’t be saved. Any extra stitch goes on the right or bottom.</div>
+    </section>
+    <div class="dialog-actions"><button class="action" data-close="borderModal">Cancel</button><button class="action primary" id="saveBorder" disabled>Save as new pattern</button></div>
   </div>
 </div>
 
@@ -690,6 +713,92 @@ $('saveSettings').addEventListener('click',()=>{
 });
 function renderProjects(){const list=$('projectList');list.textContent='';for(const p of state.projects){const item=document.createElement('div');item.className='project-item'+(p.id===state.activeId?' selected':'');const info=document.createElement('div');info.className='project-info';const name=document.createElement('strong');name.textContent=p.name;const detail=document.createElement('small');detail.textContent=`${p.width}×${p.height} · Row ${p.row} of ${total(p)}`;info.append(name,detail);const actions=document.createElement('div');actions.className='project-buttons';const open=document.createElement('button');open.textContent=p.id===state.activeId?'Active':'Open';open.disabled=p.id===state.activeId;open.addEventListener('click',()=>{state.activeId=p.id;saveState();render();closeModal('projectsModal');});actions.append(open);if(p.id!=='example-mint-diamond'){const del=document.createElement('button');del.textContent='Delete';del.className='delete';del.addEventListener('click',()=>{if(!confirm(`Delete “${p.name}”? This cannot be undone.`))return;state.projects=state.projects.filter(x=>x.id!==p.id);if(state.activeId===p.id)state.activeId=state.projects[0].id;saveState();render();renderProjects();});actions.append(del);}item.append(info,actions);list.append(item);}}
 $('openProjects').addEventListener('click',()=>{renderProjects();openModal('projectsModal');});
+function edgeColor(pattern){
+  const counts=new Map();
+  for(let y=0;y<pattern.height;y++){
+    for(let x=0;x<pattern.width;x++){
+      if(y&&y!==pattern.height-1&&x&&x!==pattern.width-1)continue;
+      const color=pattern.pixels[y][x].toLowerCase();
+      counts.set(color,(counts.get(color)||0)+1);
+    }
+  }
+  let best='#ffffff',most=0;
+  for(const [color,n] of counts)if(n>most){best=color;most=n;}
+  return best;
+}
+function buildBorder(pattern,width,height,color){
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<pattern.width||height<pattern.height||
+     width<2||height<2||width>150||height>150||(width===pattern.width&&height===pattern.height)||
+     !/^#[0-9a-f]{6}$/i.test(color))return null;
+  const left=Math.floor((width-pattern.width)/2),top=Math.floor((height-pattern.height)/2);
+  const right=width-pattern.width-left,bottom=height-pattern.height-top;
+  const pixels=Array.from({length:height},()=>Array(width).fill(color));
+  for(let y=0;y<pattern.height;y++)
+    for(let x=0;x<pattern.width;x++)pixels[y+top][x+left]=pattern.pixels[y][x];
+  return {width,height,pixels,top,right,bottom,left};
+}
+let borderSource=null,borderDraft=null;
+$('openBorder').addEventListener('click',()=>{
+  borderSource=current();
+  const {width,height,name}=borderSource;
+  $('borderSource').textContent=`${name} · ${width} × ${height} stitches. Your original and its progress will stay as they are.`;
+  $('borderWidth').min=width;$('borderHeight').min=height;
+  $('borderWidth').value=Math.max(30,width);$('borderHeight').value=Math.max(30,height);
+  $('borderColor').value=edgeColor(borderSource);
+  openModal('borderModal');renderBorderPreview();
+});
+function renderBorderPreview(){
+  if(!borderSource)return;
+  const width=Number($('borderWidth').value),height=Number($('borderHeight').value),color=$('borderColor').value;
+  borderDraft=buildBorder(borderSource,width,height,color);
+  const failed=!borderDraft, error=$('borderError');
+  $('borderPreview').classList.toggle('hidden',failed);
+  $('saveBorder').disabled=failed;
+  error.classList.toggle('hidden',!failed);
+  if(failed){
+    if(width===borderSource.width&&height===borderSource.height){
+      error.textContent=width===150&&height===150
+        ?'This pattern is already at the 150 × 150 stitch limit.'
+        :'Increase the width or height to add a border.';
+    }else{
+      error.textContent=`Enter whole numbers from ${borderSource.width}–150 wide and ${borderSource.height}–150 high. A border cannot shrink the image.`;
+    }
+    return;
+  }
+  error.textContent='';
+  const {pixels,top,right,bottom,left}=borderDraft;
+  const canvas=$('borderCanvas'),size=Math.max(2,Math.floor(320/Math.max(width,height)));
+  canvas.width=width*size;canvas.height=height*size;
+  canvas.setAttribute('aria-label',`Preview of the ${width} by ${height} stitch pattern with a centered border`);
+  const ctx=canvas.getContext('2d');
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+    ctx.fillStyle=pixels[y][x];ctx.fillRect(x*size,y*size,size,size);
+  }
+  if(typeof ctx.setLineDash==='function'){
+    ctx.lineWidth=1.5;ctx.setLineDash([4,4]);
+    const x=left*size+.75,y=top*size+.75,w=borderSource.width*size-1.5,h=borderSource.height*size-1.5;
+    ctx.strokeStyle='#10141c';ctx.strokeRect(x,y,w,h);
+    ctx.lineDashOffset=4;ctx.strokeStyle='#f7fbff';ctx.strokeRect(x,y,w,h);
+  }
+  $('borderCounts').textContent=`${width} × ${height} stitches · ${width+height-1} diagonal rows. Border: top ${top}, right ${right}, bottom ${bottom}, left ${left}.`;
+}
+for(const id of ['borderWidth','borderHeight','borderColor'])$(id).addEventListener('input',renderBorderPreview);
+$('saveBorder').addEventListener('click',()=>{
+  if(!borderSource||!borderDraft||!$('borderModal').classList.contains('open'))return;
+  const {width,height,pixels}=borderDraft;
+  const suffix=` · ${width}×${height}`;
+  const p={id:`p-${Date.now()}-${Math.random().toString(36).slice(2,9)}`,
+    name:borderSource.name.slice(0,60-suffix.length)+suffix,width,height,pixels,row:1,corner:borderSource.corner};
+  const next={...state,projects:[...state.projects,p],activeId:p.id};
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next));}
+  catch(err){
+    console.warn('Storage unavailable or full',err);
+    const error=$('borderError');error.textContent='Could not save this copy. Your original pattern has not changed.';
+    error.classList.remove('hidden');return;
+  }
+  state=next;borderDraft=null;borderSource=null;
+  render();closeModal('borderModal');
+});
 const fullImportCrop=()=>({x:0,y:0,w:1,h:1});
 let sourceImage=null,sourceIsJpeg=false,crop=fullImportCrop(),dragStart=null,cropBeforeDrag=null,importResult=null,importReadToken=0,analysisBusy=false,importRevision=0;
 function importFields(){

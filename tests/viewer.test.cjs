@@ -295,3 +295,58 @@ test('modal focus wraps within the dialog and Escape returns it to the viewer tr
   assert.equal(document.activeElement,trigger);
   assert.equal(element('viewerApp').inert,false);
 });
+
+test('border centers the original without changing any stitch and places odd extras on bottom/right',()=>{
+  const {evaluate}=app();
+  const result=evaluate("buildBorder({width:3,height:2,pixels:[['#abcDEF','#101010','#202020'],['#303030','#404040','#505050']]},6,5,'#ffffff')");
+  const {top,right,bottom,left}=result;
+  assert.deepEqual([top,right,bottom,left],[1,2,2,1]);
+  assert.deepEqual(result.pixels.slice(top,top+2).map(row=>row.slice(left,left+3)),[['#abcDEF','#101010','#202020'],['#303030','#404040','#505050']]);
+  assert.equal(result.pixels.flat().filter(p=>p==='#ffffff').length,24);
+  assert.equal(evaluate("buildBorder(newSample(),14,30,'#abcdef')"),null);
+  assert.equal(evaluate("buildBorder(newSample(),30,151,'#abcdef')"),null);
+  assert.equal(evaluate("buildBorder(newSample(),15,15,'#abcdef')"),null);
+  assert.equal(evaluate("buildBorder(newSample(),20.2,30,'#abcdef')"),null);
+  assert.deepEqual(evaluate("(()=>{const p=buildBorder(newSample(),15,150,'#abcdef');return [p.left,p.right,p.top,p.bottom,p.pixels.length,p.pixels[0].length]})()"),[0,0,67,68,150,15]);
+});
+
+test('Patterns border action previews and saves a new row-one pattern without changing original or default',()=>{
+  const original={id:'test-pattern',name:'Original',width:23,height:22,row:9,corner:'bl',pixels:Array.from({length:22},()=>Array(23).fill('#123456'))};
+  original.pixels[8][8]='#abcdef';
+  const key='c2c-crochet-v1',storage=new Map([[key,JSON.stringify({activeId:original.id,defaultCorner:'tr',projects:[original]})]]);
+  const {element,evaluate}=app(storage);
+  element('openProjects').events.click();element('openBorder').events.click();
+  assert.equal(element('borderWidth').value,30);
+  assert.equal(element('borderHeight').value,30);
+  assert.equal(element('borderColor').value,'#123456');
+  element('borderWidth').value=20;element('borderWidth').events.input();
+  assert.equal(element('saveBorder').disabled,true);
+  element('saveBorder').events.click();
+  assert.equal(evaluate('state.projects.length'),1);
+  element('borderWidth').value=30;element('borderWidth').events.input();
+  element('borderColor').value='#000000';element('borderColor').events.input();
+  assert.match(element('borderCounts').textContent,/59 diagonal rows.*top 4, right 4, bottom 4, left 3/);
+  element('saveBorder').events.click();
+  const saved=JSON.parse(storage.get(key));
+  assert.equal(saved.projects.length,2);
+  assert.deepEqual(saved.projects[0],original);
+  assert.equal(saved.defaultCorner,'tr');
+  const copy=saved.projects[1];
+  assert.equal(saved.activeId,copy.id);
+  assert.deepEqual([copy.width,copy.height,copy.row,copy.corner],[30,30,1,'bl']);
+  assert.equal(copy.pixels[12][11],'#abcdef');
+  assert.equal(copy.pixels.flat().filter(p=>p==='#000000').length,394);
+  assert.equal(app(storage).evaluate('total(current())'),59);
+});
+
+test('saving a border leaves the original active if storage is full',()=>{
+  const storage=new Map();
+  storage.set=()=>{throw Error('Storage quota');};
+  const {element,evaluate}=app(storage);
+  element('openBorder').events.click();
+  element('saveBorder').events.click();
+  assert.equal(evaluate('state.projects.length'),1);
+  assert.equal(evaluate('state.activeId'),'example-mint-diamond');
+  assert.match(element('borderError').textContent,/original pattern has not changed/);
+  assert.equal(element('borderModal').classList.contains('open'),true);
+});
