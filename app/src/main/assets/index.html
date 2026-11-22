@@ -87,6 +87,20 @@
     .crop-box {border:1px solid #546477;border-radius:12px;overflow:hidden;max-height:245px;display:flex;justify-content:center;background:#080e17;}
     .crop-box canvas {max-width:100%;max-height:245px;width:auto;height:auto;object-fit:contain; touch-action:none; display:block;cursor:crosshair;}
     .error {font-size:13px;color:#ffb3bb;min-height:18px;margin-top:8px;}
+    #importAdjust {margin-top:16px;padding:10px 12px;border:1px solid #3a4b61;border-radius:11px;}
+    #importAdjust summary {cursor:pointer;font-weight:650;padding:5px 0;}
+    #importAdjust .check-line {margin-top:12px;font-size:14px;}
+    #importAdjust .field-row {margin-top:10px;}
+    .import-status:empty {display:none;}
+    #importReview {margin-top:12px;padding:12px;border:1px solid #3a4b61;border-radius:11px;}
+    #importReview h3 {margin:0 0 10px;font-size:16px;}
+    .import-review-pair {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;}
+    .import-review-pair figure {margin:0;min-width:0;}
+    .import-review-pair figcaption {font-size:12px;color:#b8c7d9;margin-bottom:5px;font-weight:650;}
+    .import-review-image {background:#080e17;border-radius:8px;display:flex;justify-content:center;padding:8px;}
+    .import-review-image canvas {display:block;max-width:100%;max-height:290px;width:auto;height:auto;object-fit:contain;}
+    #importPreviewCanvas {image-rendering:pixelated;}
+    .dialog-actions button:disabled {opacity:.5;cursor:not-allowed;}
     .hidden {display:none!important;}
     @media (max-width:640px) { .app{gap:11px;} .summary {padding:13px;} .count-box{min-width:110px;} .board-holder{min-height:220px;} canvas#patternCanvas{max-height:54dvh;} .nav-btn {min-height:61px;gap:4px;font-size:15px;} .strip-heading{width:65px;} .strip-legend{display:none;} .outline-btn{padding:11px 10px;} }
     @media (max-height:640px) and (min-width:700px) { .app{gap:8px;} .summary{padding:8px 13px;} .board-card{padding:8px;} canvas#patternCanvas{max-height:48dvh;} .nav-btn{min-height:47px;} .strip{min-height:53px;padding:8px 12px;} .topbar{min-height:45px;} .brand .logo{width:59px;} }
@@ -146,7 +160,7 @@
   <div class="dialog">
     <div class="dialog-head"><h2 id="settingsTitle">Pattern settings</h2><button class="dialog-close" data-close="settingsModal" aria-label="Close">×</button></div>
     <p>Choose the corner where your first crochet square begins.</p>
-    <div class="field"><label for="startCorner">Start crocheting from</label><select id="startCorner"><option value="tl">Top left ↘</option><option value="br">Bottom right ↖</option><option value="tr">Top right ↙</option><option value="bl">Bottom left ↗</option></select><p class="field-hint">Changing the starting corner resets the current row to 1.</p></div>
+    <div class="field"><label for="startCorner">Start crocheting from</label><select id="startCorner"><option value="tl">Top left ↘</option><option value="br">Bottom right ↖</option><option value="tr">Top right ↙</option><option value="bl">Bottom left ↗</option></select><p class="field-hint">Changing the starting corner resets this pattern to row 1 and sets the default for new patterns. Other saved patterns keep their own corner and row.</p></div>
     <div class="field"><label class="check-line"><input id="showStrip" type="checkbox" checked> Show row color squares below the grid</label></div>
     <div class="dialog-actions"><a class="action" href="https://glowrow.invalid/native/check-for-updates">Check for updates</a>
       <button class="action primary" id="saveSettings">Save settings</button></div>
@@ -156,36 +170,337 @@
 <div class="scrim" id="importModal" role="dialog" aria-modal="true" aria-labelledby="importTitle">
   <div class="dialog">
     <div class="dialog-head"><h2 id="importTitle">Add a pattern</h2><button class="dialog-close" data-close="importModal" aria-label="Close">×</button></div>
-    <p>Choose a pixel-art image or a screenshot of a crochet grid. For chart screenshots, crop to the grid only.</p>
+    <p>Choose an image, then check the converted squares before saving.</p>
     <div class="field"><label for="importFile">Pattern image</label><input type="file" id="importFile" accept="image/png,image/jpeg,image/webp,image/gif,image/bmp,image/*"></div>
     <div class="field"><label for="importName">Pattern name</label><input type="text" id="importName" maxlength="60" placeholder="My crochet pattern"></div>
-    <div class="field-row"><div class="field"><label for="importCols">Squares across</label><input id="importCols" type="number" min="2" max="150" value="30" inputmode="numeric"></div><div class="field"><label for="importRows">Squares down</label><input id="importRows" type="number" min="2" max="150" value="30" inputmode="numeric"></div></div>
-    <div class="field"><label class="check-line"><input id="gridChartMode" type="checkbox"> Image contains printed grid lines (chart/screenshot)</label><div class="field-hint">This mode samples inside each square and attempts to ignore red guide lines.</div></div>
-    <div id="cropArea" class="hidden"><div class="field"><label>Crop to the actual pattern</label><div class="crop-box"><canvas id="cropCanvas" width="480" height="300" aria-label="Drag to crop the image to the pattern grid"></canvas></div><div class="field-hint">Draw a rectangle over the grid (exclude row numbers and titles). Tap “Reset crop” if needed.</div><button class="small-btn" id="resetCrop" style="margin-top:9px">Reset crop</button></div></div>
+    <div class="field"><label for="importMode">Image type</label><select id="importMode" aria-describedby="importModeHint"><option value="chart">Crochet chart or screenshot (with grid lines)</option><option value="pixel">Plain pixel art (no grid lines)</option></select><div id="importModeHint" class="field-hint"></div></div>
+    <details id="importAdjust" class="hidden">
+      <summary>Adjust grid or crop</summary>
+      <label class="check-line" id="importManualLine"><input type="checkbox" id="importManual"> Enter the chart size myself</label>
+      <label class="check-line" id="importGuidesLine"><input type="checkbox" id="importGuides"> Ignore thin red guide lines</label>
+      <div class="field-row hidden" id="importDimensions"><div class="field"><label for="importCols">Squares across</label><input id="importCols" type="number" min="2" max="150" inputmode="numeric" placeholder="Across"></div><div class="field"><label for="importRows">Squares down</label><input id="importRows" type="number" min="2" max="150" inputmode="numeric" placeholder="Down"></div></div>
+      <div id="importDimensionsHint" class="field-hint"></div>
+      <div class="field"><label>Image crop (optional)</label><div class="crop-box"><canvas id="cropCanvas" width="480" height="300" aria-label="Drag to select the part of the image to import"></canvas></div><div class="field-hint">Drag from one corner to the opposite corner. For a manual chart import, select exactly the outer grid, leaving out titles and numbers.</div><button class="small-btn" id="resetCrop" style="margin-top:9px">Use whole image</button></div>
+    </details>
     <div id="importError" class="error" role="alert"></div>
-    <div class="dialog-actions"><button class="action" data-close="importModal">Cancel</button><button class="action primary" id="createPattern">Create pattern</button></div>
+    <p id="importStatus" class="import-status" role="status" aria-live="polite"></p>
+    <section id="importReview" class="hidden" aria-labelledby="importReviewTitle">
+      <h3 id="importReviewTitle">Pattern preview</h3>
+      <div class="import-review-pair">
+        <figure><figcaption>Selected source area</figcaption><div class="import-review-image"><canvas id="importSourceCanvas" role="img" aria-label="Source image area used for this preview"></canvas></div></figure>
+        <figure><figcaption>Converted squares</figcaption><div class="import-review-image"><canvas id="importPreviewCanvas" role="img"></canvas></div></figure>
+      </div>
+      <p id="importReviewDetail"></p>
+      <label class="check-line"><input type="checkbox" id="importVerified"> The square count and colors match my pattern.</label>
+    </section>
+    <div class="dialog-actions"><button class="action" data-close="importModal">Cancel</button><button class="action" id="previewPattern" disabled>Preview pattern</button><button class="action primary hidden" id="createPattern" disabled>Save pattern</button></div>
   </div>
 </div>
 
 <div class="scrim" id="jumpModal" role="dialog" aria-modal="true" aria-labelledby="jumpTitle"><div class="dialog" style="max-width:420px"><div class="dialog-head"><h2 id="jumpTitle">Jump to a row</h2><button class="dialog-close" data-close="jumpModal" aria-label="Close">×</button></div><div class="field"><label for="jumpInput">Row number</label><input id="jumpInput" type="number" min="1" inputmode="numeric"></div><div class="dialog-actions"><button class="action" data-close="jumpModal">Cancel</button><button class="action primary" id="confirmJump">Go to row</button></div></div></div>
 
+<script id="gridImportCore">
+/* GlowRow image import. Locally decoded, axis-aligned digital images only. */
+const GlowRowImport = (() => {
+  const whole = {x:0,y:0,w:1,h:1};
+  const within = (x,min,max) => Math.max(min, Math.min(x,max));
+  const used = n => Number.isInteger(n) && n >= 2 && n <= 150;
+  const hex = n => '#' + n.toString(16).padStart(6,'0');
+  const rgbCode = (rgba,w,x,y) => {
+    const o=(y*w+x)*4,a=rgba[o+3];
+    if(a===255)return (rgba[o]<<16)|(rgba[o+1]<<8)|rgba[o+2];
+    const composite = k => Math.round((rgba[o+k]*a + 255*(255-a))/255);
+    return (composite(0)<<16)|(composite(1)<<8)|composite(2);
+  };
+  const bucket = n => ((n&0xf00000)>>12)|((n&0xf000)>>8)|((n&0xf0)>>4);
+  const red = n => (n>>16)>125 && ((n>>16)-((n>>8)&255))>65 && ((n>>16)-(n&255))>60;
+  const abs=Math.abs;
+
+  function readBounds(crop,w,h) {
+    const {x,y,w:cw,h:ch}=crop||whole;
+    if (![x,y,cw,ch].every(Number.isFinite)||cw<=0||ch<=0)return null;
+    const l=within(Math.round(x*w),0,w-1), t=within(Math.round(y*h),0,h-1);
+    const r=within(Math.round((x+cw)*w),0,w), b=within(Math.round((y+ch)*h),0,h);
+    return r-l>=2 && b-t>=2?{l,t,r,b}:null;
+  }
+  const normalized = (bounds,w,h) => ({
+    x:bounds.l/w,y:bounds.t/h,w:(bounds.r-bounds.l)/w,h:(bounds.b-bounds.t)/h
+  });
+
+  // A printed rail is a narrow, near-continuous line of similar color across
+  // most orthogonal scanlines. Isolated letters/marks don't sustain projection.
+  function lineRuns(image,box,vertical) {
+    const {data,width}=image;
+    const start=vertical?box.l:box.t, end=vertical?box.r:box.b;
+    const low=vertical?box.t:box.l, high=vertical?box.b:box.r;
+    const probes=Math.min(127,high-low);
+    const minHits=Math.ceil(probes*.67);
+    const counts=new Uint16Array(4096);
+    const rails=[];
+    let run=null;
+    for(let p=start;p<end;p++){
+      counts.fill(0);
+      let top=0,topId=-1;
+      for(let s=0;s<probes;s++){
+        const q=low+Math.min(high-low-1,Math.floor((s+.414)*(high-low)/probes));
+        const code=bucket(rgbCode(data,width,vertical?p:q,vertical?q:p));
+        if(++counts[code]>top){top=counts[code];topId=code;}
+      }
+      if(top>=minHits){
+        if(run&&run.hi+1===p&&run.color===topId)run.hi=p;
+        else {run={lo:p,hi:p,color:topId};rails.push(run);}
+      }else run=null;
+    }
+    return rails.filter(a=>a.hi-a.lo+1<=(end-start)*.04).map(a=>({...a,mid:(a.lo+a.hi)/2}));
+  }
+
+  // JPEG compression and semi-transparent chart lines can change a rail's
+  // RGB as it passes over stitches. A continuous local depression (or ridge)
+  // remains visible even when no single projected RGB bucket dominates.
+  function contrastRuns(image,box,vertical,threshold) {
+    const {data,width}=image;
+    const start=vertical?box.l:box.t,end=vertical?box.r:box.b;
+    const low=vertical?box.t:box.l,high=vertical?box.b:box.r;
+    const probes=Math.min(150,high-low);
+    const rails=[];
+    let run=null;
+    const lum=(p,q)=>{const n=rgbCode(data,width,vertical?p:q,vertical?q:p);return ((n>>16)+((n>>8)&255)+(n&255))/3;};
+    for(let p=start;p<end;p++){
+      const from=Math.max(start,p-2),to=Math.min(end-1,p+2);
+      let dark=0,light=0;
+      for(let s=0;s<probes;s++){
+        const q=low+Math.min(high-low-1,Math.floor((s+.371)*(high-low)/probes));
+        const center=lum(p,q);
+        const a=from===p?lum(to,q)-center:lum(from,q)-center;
+        const b=to===p?a:lum(to,q)-center;
+        if(a+b>24&&Math.min(a,b)>threshold)dark++;
+        if(a+b < -24&&Math.max(a,b)<-threshold)light++;
+      }
+      const top=Math.max(dark,light);
+      if(top>=probes*.65){
+        const color=dark>=light?1:2;
+        if(run&&run.hi+1===p&&run.color===color){
+          run.hi=p;
+          if(top>run.top){run.mid=p;run.top=top;}
+        }else {run={lo:p,hi:p,color,mid:p,top};rails.push(run);}
+      }else run=null;
+    }
+    return rails.filter(r=>r.hi-r.lo+1<=(end-start)*.04);
+  }
+
+  function gridFit(runs, start,end) {
+    if(runs.length<6 || runs.length>220)return null;
+    let best=null, competing=null;
+    const distinct=(a,b)=>a.found[0].mid>b.found[b.found.length-1].mid || b.found[0].mid>a.found[a.found.length-1].mid || abs(a.pitch-b.pitch)>Math.max(1.5,a.pitch*.20);
+    // The median interval is useful when a title/border or a thick major line
+    // inserts a few spurious positions. Also try nearby observed intervals.
+    const gaps=runs.slice(1).map((r,i)=>r.mid-runs[i].mid).filter(g=>g>=4);
+    const bins=new Map();
+    for(const gap of gaps){const key=Math.round(gap);bins.set(key,(bins.get(key)||0)+1);}
+    const pitches=[...bins].sort((a,b)=>b[1]-a[1]).slice(0,12).map(([p])=>p);
+    for(const seed of runs){
+      for(const seedStep of pitches){
+        const found=[seed];
+        let last=seed;
+        for(let i=runs.indexOf(seed)+1;i<runs.length;i++){
+          const run=runs[i],delta=run.mid-last.mid;
+          const projected=(run.mid-seed.mid)/(found.length);
+          const pitch=found.length<=2?seedStep:(last.mid-seed.mid)/(found.length-1);
+          if(delta<pitch*.68)continue;
+          if(delta>pitch*1.27)break;
+          if(abs(projected-seedStep)>Math.max(0.8,seedStep*.14))break;
+          found.push(run);last=run;
+        }
+        const cells=found.length-1;
+        if(cells<5||cells>150)continue;
+        const pitch=(last.mid-seed.mid)/cells;
+        const firstWidth=seed.hi-seed.lo+1, lastWidth=last.hi-last.lo+1;
+        const railWidths=found.map(r=>r.hi-r.lo+1);
+        if(railWidths.some(w=>w>pitch*.35)||firstWidth>pitch*.35||lastWidth>pitch*.35)continue;
+        const coverage=(last.mid-seed.mid)/(end-start);
+        if(coverage<.62)continue;
+        // A 2× period can score almost as well as the real grid by skipping
+        // every other rail. Require its interior not to contain repeated
+        // same-color rails at the half-step.
+        let halfSteps=0;
+        for(let i=0;i<cells;i++){
+          const half=(found[i].mid+found[i+1].mid)/2;
+          if(runs.some(r=>abs(r.mid-half)<pitch*.12&&
+              (r.color===found[i].color||r.color===found[i+1].color)))halfSteps++;
+        }
+        if(halfSteps>=cells*.65)continue;
+        const jitter=found.reduce((a,r,i)=>a+abs(r.mid-(seed.mid+i*pitch)),0)/found.length;
+        if(jitter>Math.max(.95,pitch*.075))continue;
+        const score=coverage*(1-Math.min(.15,jitter/Math.max(4,pitch)));
+        const candidate={found,pitch,score};
+        if(!best || score>best.score) {
+          if(best && distinct(best,candidate))competing=best;
+          best=candidate;
+        } else if(distinct(best,candidate)&&(!competing||score>competing.score))competing=candidate;
+      }
+    }
+    if(!best || competing&&distinct(best,competing)&&competing.score>best.score*.94)return null;
+    return best;
+  }
+
+  function detect(image,box) {
+    const axis=(vertical,start,end)=>{
+      const stable=gridFit(lineRuns(image,box,vertical),start,end);
+      if(stable&&stable.score>.91)return stable;
+      const sharp=gridFit(contrastRuns(image,box,vertical,6),start,end);
+      if(sharp&&sharp.score>.91)return sharp;
+      const mixed=gridFit(contrastRuns(image,box,vertical,-16),start,end);
+      // A partial band of solid-color rails isn't the complete chart if local
+      // contrast shows a substantially longer, equally regular grid.
+      const best=[stable,sharp,mixed].filter(Boolean).sort((a,b)=>b.score-a.score)[0];
+      return mixed===best&&(!sharp||mixed.score>sharp.score+.035)?mixed:(sharp&&sharp.score>(stable?stable.score:0)+.035?sharp:stable||sharp||mixed);
+    };
+    const X=axis(true,box.l,box.r);
+    const Y=axis(false,box.t,box.b);
+    if(!X||!Y || abs(X.pitch-Y.pitch)/Math.max(X.pitch,Y.pitch)>.13)return null;
+    // Don't treat a visibly unfinished repeat as a credible count.
+    const outside = (rails,start,end,pitch) => Math.max(rails[0].mid-start,end-1-rails[rails.length-1].mid)/pitch;
+    if(outside(X.found,box.l,box.r,X.pitch)>4||outside(Y.found,box.t,box.b,Y.pitch)>4)return null;
+    return {X:X.found,Y:Y.found};
+  }
+
+  function choose(values, ignoreRedGuides) {
+    // Count local RGB neighborhoods instead of averaging across palette colors.
+    // Always return a real interior sample (not a synthetic channel median).
+    const bins=new Map();
+    const skipGuide=ignoreRedGuides && values.filter(v=>red(v.color)&&!v.band).length===0 &&
+      values.filter(v=>red(v.color)&&v.band).length>0 && values.filter(v=>!red(v.color)).length>=4;
+    for(const v of values){
+      if(skipGuide&&red(v.color)&&v.band)continue;
+      const id=bucket(v.color);
+      const bin=bins.get(id)||{votes:0,exact:new Map(),closest:v.distance};
+      bin.votes++;
+      bin.closest=Math.min(bin.closest,v.distance);
+      bin.exact.set(v.color,(bin.exact.get(v.color)||0)+1);
+      bins.set(id,bin);
+    }
+    let best;
+    for(const bin of bins.values())
+      if(!best||bin.votes>best.votes||bin.votes===best.votes&&bin.closest<best.closest)best=bin;
+    let color,weight=-1;
+    for(const [c,n] of best.exact)if(n>weight){color=c;weight=n;}
+    return hex(color);
+  }
+
+  function stitch(image,x0,x1,y0,y1,trim,ignoreRedGuides) {
+    const values=[];
+    const nx=Math.min(11,Math.max(1,Math.ceil(x1-x0)));
+    const ny=Math.min(11,Math.max(1,Math.ceil(y1-y0)));
+    for(let y=0;y<ny;y++){
+      for(let x=0;x<nx;x++){
+        const a=trim+(1-2*trim)*(x+.5)/nx, b=trim+(1-2*trim)*(y+.5)/ny;
+        const xx=within(Math.floor(x0+(x1-x0)*a),0,image.width-1);
+        const yy=within(Math.floor(y0+(y1-y0)*b),0,image.height-1);
+        values.push({color:rgbCode(image.data,image.width,xx,yy),distance:abs(a-.5)+abs(b-.5),
+          band:Math.min(abs(a-b),abs(a+b-1))<.17});
+      }
+    }
+    return choose(values,ignoreRedGuides);
+  }
+
+  function consolidatePalette(colors) {
+    // JPEG ringing produces clouds of tiny RGB variations around otherwise
+    // flat stitch colors. Assign to nearby stable anchors without chaining
+    // colors together or modifying PNG/pixel-art palette entries.
+    const unique=new Map(), anchors=[], replacement=new Map();
+    for(const row of colors) for(const color of row) unique.set(color,(unique.get(color)||0)+1);
+    const rgb=c=>[parseInt(c.slice(1,3),16),parseInt(c.slice(3,5),16),parseInt(c.slice(5,7),16)];
+    const ranked=[...unique].sort((a,b)=>b[1]-a[1]);
+    for(const [color] of ranked){
+      const [r,g,b]=rgb(color);
+      let best=null,limit=20*20;
+      for(const anchor of anchors){
+        const ra=r-anchor.r,ga=g-anchor.g,ba=b-anchor.b;
+        const distance=ra*ra+ga*ga+ba*ba;
+        if(distance<=limit){best=anchor;limit=distance;}
+      }
+      if(!best){best={color,r,g,b};anchors.push(best);}
+      replacement.set(color,best.color);
+    }
+    return colors.map(row=>row.map(color=>replacement.get(color)));
+  }
+
+  function analyze(image,opts={}) {
+    const {data,width:w,height:h}=image;
+    if(!Number.isInteger(w)||!Number.isInteger(h)||w<2||h<2||!data||data.length!==w*h*4)
+      throw new Error('Could not read image pixels.');
+    const box=readBounds(opts.crop,w,h);
+    if(!box)throw new Error('Select a larger crop.');
+    const requested=used(opts.cols)&&used(opts.rows);
+    const dims={width:requested?opts.cols:0,height:requested?opts.rows:0};
+    const bounds=normalized(box,w,h);
+    const stop=(reason,extra={})=>({colors:[],...dims,method:'needs-input',bounds,reason,...extra});
+    const isChart=opts.mode==='chart';
+    let rails=null;
+    if(isChart&&!opts.useManual){
+      rails=detect(image,box);
+      if(!rails)return stop('No clear printed grid found. Crop tightly to the whole chart or confirm its dimensions manually.');
+      const width=rails.X.length-1,height=rails.Y.length-1;
+      if(requested&&(width!==opts.cols||height!==opts.rows))
+        return stop(`Printed grid appears to be ${width} × ${height}. Review dimensions or use manual crop.`,
+          {width,height,detected:{width,height}});
+      dims.width=width;dims.height=height;
+    }
+    if(!used(dims.width)||!used(dims.height))return stop('Enter the original squares across and down.');
+    if(!rails && ((box.r-box.l)<dims.width || (box.b-box.t)<dims.height))
+      return stop('The selected crop has fewer image pixels than stitches. Use a larger or higher-quality source.');
+    const colors=[];
+    for(let row=0;row<dims.height;row++){
+      const line=[];
+      for(let col=0;col<dims.width;col++){
+        const x0=rails?rails.X[col].hi+1:box.l+(box.r-box.l)*col/dims.width;
+        const x1=rails?rails.X[col+1].lo:box.l+(box.r-box.l)*(col+1)/dims.width;
+        const y0=rails?rails.Y[row].hi+1:box.t+(box.b-box.t)*row/dims.height;
+        const y1=rails?rails.Y[row+1].lo:box.t+(box.b-box.t)*(row+1)/dims.height;
+        line.push(stitch(image,x0,x1,y0,y1,isChart?(rails ? .08 : .21):0,isChart&&opts.ignoreRedGuides===true));
+      }
+      colors.push(line);
+    }
+    const detectedBounds=rails?{
+      l:rails.X[0].lo,r:rails.X[rails.X.length-1].hi+1,t:rails.Y[0].lo,b:rails.Y[rails.Y.length-1].hi+1
+    }:box;
+    return {colors:isChart&&opts.compressPalette===true?consolidatePalette(colors):colors,...dims,method:rails?'detected':'manual',bounds:normalized(detectedBounds,w,h)};
+  }
+  return {analyze};
+})();
+</script>
 <script>
 'use strict';
 const SAMPLE_PATTERN = {"name": "Mint Diamond \u2022 Practice", "width": 15, "height": 15, "pixels": [["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259"], ["#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259"], ["#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#efb870", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#efb870", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#82e6ae", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#82e6ae", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"], ["#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259", "#344259"]]};
 const STORAGE_KEY='c2c-crochet-v1';
 const $=id=>document.getElementById(id);
 const CORNERS=['tl','tr','br','bl'];
-const newSample=()=>({id:'example-mint-diamond',name:SAMPLE_PATTERN.name,width:SAMPLE_PATTERN.width,height:SAMPLE_PATTERN.height,pixels:SAMPLE_PATTERN.pixels,row:1,corner:'tl'});
-const defaults=()=>({activeId:'example-mint-diamond',showStrip:true,projects:[newSample()]});
-function cleanProject(value){
+const DEFAULT_CORNER='br';
+const newSample=()=>({id:'example-mint-diamond',name:SAMPLE_PATTERN.name,width:SAMPLE_PATTERN.width,height:SAMPLE_PATTERN.height,pixels:SAMPLE_PATTERN.pixels,row:1,corner:DEFAULT_CORNER});
+const defaults=()=>({activeId:'example-mint-diamond',showStrip:true,defaultCorner:DEFAULT_CORNER,projects:[newSample()]});
+function cleanProject(value,defaultCorner){
   if (!value || !Array.isArray(value.pixels)) return null;
   const w=Number(value.width),h=Number(value.height);
   if (!Number.isInteger(w)||!Number.isInteger(h)||w<2||h<2||w>150||h>150||value.pixels.length!==h) return null;
   if (!value.pixels.every(row=>Array.isArray(row)&&row.length===w&&row.every(color=>/^#[0-9a-f]{6}$/i.test(color)))) return null;
-  return {id:String(value.id).slice(0,100),name:String(value.name||'Untitled').slice(0,60),width:w,height:h,pixels:value.pixels,row:Math.min(w+h-1,Math.max(1,Math.floor(Number(value.row)||1))),corner:CORNERS.includes(value.corner)?value.corner:'tl'};
+  return {id:String(value.id).slice(0,100),name:String(value.name||'Untitled').slice(0,60),width:w,height:h,pixels:value.pixels,row:Math.min(w+h-1,Math.max(1,Math.floor(Number(value.row)||1))),corner:CORNERS.includes(value.corner)?value.corner:defaultCorner};
 }
 function loadState(){
-  try {const raw=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');if(raw && Array.isArray(raw.projects)){const projects=raw.projects.map(cleanProject).filter(Boolean);if(projects.length){return {activeId:projects.some(p=>p.id===raw.activeId)?raw.activeId:projects[0].id,showStrip:raw.showStrip!==false,projects};}}}catch(err){console.warn('Could not restore saved project',err);}
+  try {
+    const raw=JSON.parse(localStorage.getItem(STORAGE_KEY)||'null');
+    if(raw&&Array.isArray(raw.projects)){
+      const configured=CORNERS.includes(raw.defaultCorner);
+      const defaultCorner=configured?raw.defaultCorner:DEFAULT_CORNER;
+      const projects=raw.projects.map(p=>cleanProject(p,defaultCorner)).filter(Boolean);
+      if(projects.length){
+        // Legacy records did not track whether a corner was selected. Only
+        // migrate a lone, untouched practice project from the old default.
+        const practice=projects[0];
+        if(!configured&&raw.projects.length===1&&practice.id==='example-mint-diamond'&&raw.projects[0].row===1&&practice.corner==='tl')practice.corner=DEFAULT_CORNER;
+        return {activeId:projects.some(p=>p.id===raw.activeId)?raw.activeId:projects[0].id,showStrip:raw.showStrip!==false,defaultCorner,projects};
+      }
+    }
+  }catch(err){console.warn('Could not restore saved project',err);}
   return defaults();
 }
 let state=loadState();
@@ -274,77 +589,187 @@ $('jumpRow').addEventListener('click',()=>{$('jumpInput').max=total(current());$
 $('confirmJump').addEventListener('click',()=>{setRow($('jumpInput').value);closeModal('jumpModal');});
 $('jumpInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('confirmJump').click();});
 $('openSettings').addEventListener('click',()=>{$('startCorner').value=current().corner;$('showStrip').checked=state.showStrip;openModal('settingsModal');});
-$('saveSettings').addEventListener('click',()=>{if(current().corner!==$('startCorner').value){current().corner=$('startCorner').value;current().row=1;}state.showStrip=$('showStrip').checked;saveState();render();closeModal('settingsModal');});
+$('saveSettings').addEventListener('click',()=>{
+  const pattern=current(),corner=$('startCorner').value;
+  const changed=CORNERS.includes(corner)&&corner!==pattern.corner;
+  const next={...state,showStrip:$('showStrip').checked};
+  if(changed){
+    next.defaultCorner=corner;
+    next.projects=state.projects.map(p=>p.id===pattern.id?{...p,corner,row:1}:p);
+  }
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next));}
+  catch(err){console.warn('Storage unavailable or full',err);alert('Could not save settings on this device. Check available storage.');return;}
+  state=next;
+  render();closeModal('settingsModal');
+});
 function renderProjects(){const list=$('projectList');list.textContent='';for(const p of state.projects){const item=document.createElement('div');item.className='project-item'+(p.id===state.activeId?' selected':'');const info=document.createElement('div');info.className='project-info';const name=document.createElement('strong');name.textContent=p.name;const detail=document.createElement('small');detail.textContent=`${p.width}×${p.height} · Row ${p.row} of ${total(p)}`;info.append(name,detail);const actions=document.createElement('div');actions.className='project-buttons';const open=document.createElement('button');open.textContent=p.id===state.activeId?'Active':'Open';open.disabled=p.id===state.activeId;open.addEventListener('click',()=>{state.activeId=p.id;saveState();render();closeModal('projectsModal');});actions.append(open);if(p.id!=='example-mint-diamond'){const del=document.createElement('button');del.textContent='Delete';del.className='delete';del.addEventListener('click',()=>{if(!confirm(`Delete “${p.name}”? This cannot be undone.`))return;state.projects=state.projects.filter(x=>x.id!==p.id);if(state.activeId===p.id)state.activeId=state.projects[0].id;saveState();render();renderProjects();});actions.append(del);}item.append(info,actions);list.append(item);}}
 $('openProjects').addEventListener('click',()=>{renderProjects();openModal('projectsModal');});
-$('newPattern').addEventListener('click',()=>{$('importFile').value='';$('importName').value='';$('importError').textContent='';$('cropArea').classList.add('hidden');$('gridChartMode').checked=false;sourceImage=null;openModal('importModal');});
-let sourceImage=null,crop={x:0,y:0,w:1,h:1},cropRect=null,dragStart=null;
+const fullImportCrop=()=>({x:0,y:0,w:1,h:1});
+let sourceImage=null,sourceIsJpeg=false,crop=fullImportCrop(),dragStart=null,cropBeforeDrag=null,importResult=null,importReadToken=0,analysisBusy=false,importRevision=0;
+function importFields(){
+  const chart=$('importMode').value==='chart',manual=chart&&$('importManual').checked;
+  $('importModeHint').textContent=chart?'GlowRow looks for the grid and counts its squares.':'No lines to count. Enter the size you want to crochet.';
+  $('importManualLine').classList.toggle('hidden',!chart);
+  $('importGuidesLine').classList.toggle('hidden',!chart);
+  $('importDimensions').classList.toggle('hidden',chart&&!manual);
+  $('importDimensionsHint').textContent=manual?'Use the full count of columns and rows and select the chart edges below.':'';
+}
+function invalidateImport(){
+  importRevision++;
+  importResult=null;
+  $('importVerified').checked=false;
+  $('importReview').classList.add('hidden');
+  $('createPattern').classList.add('hidden');
+  $('createPattern').disabled=true;
+  $('previewPattern').disabled=!sourceImage||analysisBusy;
+  $('importError').textContent='';
+  $('importStatus').textContent='';
+}
+$('newPattern').addEventListener('click',()=>{
+  importReadToken++;sourceImage=null;crop=fullImportCrop();dragStart=null;analysisBusy=false;
+  for(const id of ['importFile','importName','importCols','importRows'])$(id).value='';
+  $('importMode').value='chart';
+  $('importAdjust').open=false;
+  $('importAdjust').classList.add('hidden');
+  $('importManual').checked=false;
+  $('importGuides').checked=false;
+  importFields();invalidateImport();openModal('importModal');
+});
 $('importFile').addEventListener('change',async function(){
-  const file=this.files&&this.files[0];sourceImage=null;cropRect=null;dragStart=null;
-  $('cropArea').classList.add('hidden');$('importError').textContent='';if(!file)return;
+  const token=++importReadToken,file=this.files&&this.files[0];sourceImage=null;crop=fullImportCrop();dragStart=null;analysisBusy=false;
+  $('importAdjust').classList.add('hidden');invalidateImport();
+  if(!file)return;
   if(file.size>25*1024*1024){$('importError').textContent='Image is too large (25 MB maximum).';return;}
   if(file.type && !file.type.startsWith('image/') && file.type!=='application/octet-stream'){$('importError').textContent='Choose an image file.';return;}
   const url=URL.createObjectURL(file);
-  try {sourceImage=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Image format could not be opened.'));im.src=url;});
-    if(sourceImage.naturalWidth>12000||sourceImage.naturalHeight>12000)throw Error('Image dimensions are too large.');
+  $('importStatus').textContent='Opening image…';
+  try {
+    const image=await new Promise((resolve,reject)=>{const im=new Image();im.onload=()=>resolve(im);im.onerror=()=>reject(new Error('Image format could not be opened.'));im.src=url;});
+    if(token!==importReadToken)return;
+    if(!image.naturalWidth||!image.naturalHeight||image.naturalWidth>12000||image.naturalHeight>12000)throw Error('Image dimensions are not supported.');
+    sourceImage=image;
+    sourceIsJpeg=/^image\/(?:jpeg|pjpeg|jpg)$/i.test(file.type)||/\.jpe?g$/i.test(file.name);
     $('importName').value=file.name.replace(/\.[^.]+$/,'').slice(0,60);
-    crop={x:0,y:0,w:1,h:1};$('cropArea').classList.remove('hidden');drawCrop();
-  }catch(err){sourceImage=null;$('importError').textContent=err.message;}
+    $('importAdjust').classList.remove('hidden');
+    importFields();invalidateImport();drawCrop();
+  } catch(err){if(token===importReadToken){invalidateImport();$('importError').textContent=err.message;}}
   finally{URL.revokeObjectURL(url);}
 });
-function drawCrop(){if(!sourceImage)return;const canvas=$('cropCanvas'),ctx=canvas.getContext('2d');const maxW=520,maxH=245,ratio=Math.min(maxW/sourceImage.naturalWidth,maxH/sourceImage.naturalHeight),W=Math.max(1,Math.round(sourceImage.naturalWidth*ratio)),H=Math.max(1,Math.round(sourceImage.naturalHeight*ratio));canvas.width=W;canvas.height=H;ctx.drawImage(sourceImage,0,0,W,H);ctx.fillStyle='#050b14a6';ctx.fillRect(0,0,W,H);const x=crop.x*W,y=crop.y*H,w=crop.w*W,h=crop.h*H;ctx.drawImage(sourceImage,crop.x*sourceImage.naturalWidth,crop.y*sourceImage.naturalHeight,crop.w*sourceImage.naturalWidth,crop.h*sourceImage.naturalHeight,x,y,w,h);ctx.strokeStyle='#b9f9d8';ctx.lineWidth=3;ctx.strokeRect(x+1.5,y+1.5,w-3,h-3);}
-function cropPosition(e){const el=$('cropCanvas'),rect=el.getBoundingClientRect();return {x:Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width)),y:Math.max(0,Math.min(1,(e.clientY-rect.top)/rect.height))};}
-$('cropCanvas').addEventListener('pointerdown',e=>{if(!sourceImage)return;e.preventDefault();e.target.setPointerCapture(e.pointerId);dragStart=cropPosition(e);});
-$('cropCanvas').addEventListener('pointermove',e=>{if(!dragStart)return;const p=cropPosition(e);cropRect={x:Math.min(dragStart.x,p.x),y:Math.min(dragStart.y,p.y),w:Math.abs(dragStart.x-p.x),h:Math.abs(dragStart.y-p.y)};if(cropRect.w>.025&&cropRect.h>.025){crop=cropRect;drawCrop();}});
-$('cropCanvas').addEventListener('pointerup',e=>{if(!dragStart)return;const p=cropPosition(e);if(Math.abs(dragStart.x-p.x)>.025&&Math.abs(dragStart.y-p.y)>.025){crop={x:Math.min(dragStart.x,p.x),y:Math.min(dragStart.y,p.y),w:Math.abs(dragStart.x-p.x),h:Math.abs(dragStart.y-p.y)};drawCrop();}dragStart=null;cropRect=null;});
-$('cropCanvas').addEventListener('pointercancel',()=>{dragStart=null;cropRect=null;});
-$('resetCrop').addEventListener('click',()=>{crop={x:0,y:0,w:1,h:1};drawCrop();});
-function rgbToHex(v){return '#'+v.map(n=>Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,'0')).join('');}
-function median(values){values.sort((a,b)=>a-b);return values[Math.floor(values.length/2)];}
-function extractGrid(image,width,height,gridMode){
-  const maxDim=1500,scale=Math.min(1,maxDim/Math.max(image.naturalWidth,image.naturalHeight));
-  const cv=document.createElement('canvas');cv.width=Math.max(1,Math.round(image.naturalWidth*scale));cv.height=Math.max(1,Math.round(image.naturalHeight*scale));
-  const ctx=cv.getContext('2d',{willReadFrequently:true});ctx.drawImage(image,0,0,cv.width,cv.height);
-  const {data}=ctx.getImageData(0,0,cv.width,cv.height);
-  function sample(fx,fy){const x=Math.max(0,Math.min(cv.width-1,Math.floor(fx*cv.width))),y=Math.max(0,Math.min(cv.height-1,Math.floor(fy*cv.height))),o=(y*cv.width+x)*4;return [data[o],data[o+1],data[o+2]];}
-  const pixels=[];
-  for(let row=0;row<height;row++){
-    const line=[];
-    for(let col=0;col<width;col++){
-      let rgb;
-      if(gridMode){
-        const samples=[];
-        for(const [dx,dy] of [[.25,.43],[.43,.25],[.56,.81],[.81,.56],[.33,.43],[.43,.33],[.63,.77],[.77,.63]]){
-          const v=sample(crop.x+((col+dx)/width)*crop.w,crop.y+((row+dy)/height)*crop.h);
-          // Avoid diagonal red guide lines (not necessarily a red pattern color).
-          if(v[0]>125&&v[1]<90&&v[2]<90)continue;
-          samples.push(v);
-        }
-        if(!samples.length)samples.push(sample(crop.x+((col+.5)/width)*crop.w,crop.y+((row+.5)/height)*crop.h));
-        rgb=[0,1,2].map(channel=>median(samples.map(s=>s[channel])));
-        if(Math.max(...rgb)-Math.min(...rgb)<18){const avg=rgb.reduce((a,b)=>a+b,0)/3,v=[0,92,194,229,255].reduce((best,x)=>Math.abs(x-avg)<Math.abs(best-avg)?x:best,255);rgb=[v,v,v];}
-      }else{
-        rgb=sample(crop.x+((col+.5)/width)*crop.w,crop.y+((row+.5)/height)*crop.h);
-      }
-      line.push(rgbToHex(rgb));
-    }
-    pixels.push(line);
-  }
-  return pixels;
-}
-$('createPattern').addEventListener('click',()=>{
-  const err=$('importError');err.textContent='';
-  if(!sourceImage){err.textContent='Choose an image first.';return;}
-  const width=Number($('importCols').value),height=Number($('importRows').value);
-  if(!Number.isInteger(width)||!Number.isInteger(height)||width<2||height<2||width>150||height>150){err.textContent='Enter grid dimensions between 2 and 150 squares.';return;}
-  if(crop.w<=0||crop.h<=0){err.textContent='Crop area is empty.';return;}
-  try {
-    const pixels=extractGrid(sourceImage,width,height,$('gridChartMode').checked);
-    const name=$('importName').value.trim().slice(0,60)||'New pattern';
-    const p={id:`p-${Date.now()}-${Math.random().toString(36).slice(2,9)}`,name,width,height,pixels,row:1,corner:current().corner};
-    state.projects.push(p);state.activeId=p.id;saveState();render();closeModal('importModal');
-  }catch(e){console.error(e);err.textContent='Could not read this image. Try another PNG or JPG.';}
+$('importMode').addEventListener('change',()=>{
+  $('importAdjust').open=$('importMode').value==='pixel';
+  importFields();invalidateImport();
 });
+$('importManual').addEventListener('change',()=>{
+  importFields();invalidateImport();
+  if($('importManual').checked)$('importCols').focus();
+});
+for(const id of ['importCols','importRows','importGuides'])$(id).addEventListener('input',invalidateImport);
+function drawCrop(){
+  if(!sourceImage)return;
+  const canvas=$('cropCanvas'),ctx=canvas.getContext('2d'),ratio=Math.min(520/sourceImage.naturalWidth,245/sourceImage.naturalHeight);
+  const W=canvas.width=Math.max(1,Math.round(sourceImage.naturalWidth*ratio)),H=canvas.height=Math.max(1,Math.round(sourceImage.naturalHeight*ratio));
+  ctx.drawImage(sourceImage,0,0,W,H);ctx.fillStyle='#050b14a6';ctx.fillRect(0,0,W,H);
+  const x=crop.x*W,y=crop.y*H,w=crop.w*W,h=crop.h*H;
+  ctx.drawImage(sourceImage,crop.x*sourceImage.naturalWidth,crop.y*sourceImage.naturalHeight,crop.w*sourceImage.naturalWidth,crop.h*sourceImage.naturalHeight,x,y,w,h);
+  ctx.strokeStyle='#b9f9d8';ctx.lineWidth=2;ctx.strokeRect(x+1,y+1,Math.max(0,w-2),Math.max(0,h-2));
+}
+function cropPosition(e){
+  const rect=$('cropCanvas').getBoundingClientRect(),clamp=n=>Math.max(0,Math.min(1,n));
+  return {x:clamp((e.clientX-rect.left)/rect.width),y:clamp((e.clientY-rect.top)/rect.height)};
+}
+function updateImportCrop(e){
+  const p=cropPosition(e),w=Math.abs(dragStart.x-p.x),h=Math.abs(dragStart.y-p.y);
+  if(w<.009||h<.009)return;
+  crop={x:Math.min(dragStart.x,p.x),y:Math.min(dragStart.y,p.y),w,h};drawCrop();
+}
+$('cropCanvas').addEventListener('pointerdown',e=>{
+  if(!sourceImage||analysisBusy||dragStart||e.button!==0)return;
+  e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);
+  cropBeforeDrag=crop;dragStart={...cropPosition(e),pointerId:e.pointerId};invalidateImport();
+});
+$('cropCanvas').addEventListener('pointermove',e=>{if(dragStart?.pointerId===e.pointerId)updateImportCrop(e);});
+$('cropCanvas').addEventListener('pointerup',e=>{if(dragStart?.pointerId===e.pointerId){updateImportCrop(e);dragStart=null;}});
+function cancelCrop(e){if(dragStart?.pointerId===e.pointerId){dragStart=null;crop=cropBeforeDrag;drawCrop();}}
+$('cropCanvas').addEventListener('pointercancel',cancelCrop);
+$('cropCanvas').addEventListener('lostpointercapture',cancelCrop);
+$('resetCrop').addEventListener('click',()=>{crop=fullImportCrop();invalidateImport();drawCrop();});
+function readImportImage(image){
+  const cv=document.createElement('canvas'),scale=Math.min(1,2000/Math.max(image.naturalWidth,image.naturalHeight));
+  cv.width=Math.max(1,Math.round(image.naturalWidth*scale));cv.height=Math.max(1,Math.round(image.naturalHeight*scale));
+  const ctx=cv.getContext('2d',{willReadFrequently:true});ctx.imageSmoothingEnabled=false;ctx.fillStyle='#ffffff';ctx.fillRect(0,0,cv.width,cv.height);ctx.drawImage(image,0,0,cv.width,cv.height);
+  return ctx.getImageData(0,0,cv.width,cv.height);
+}
+function showImportPreview(result,mode){
+  importResult=result;
+  const canvas=$('importPreviewCanvas'),{width,height,colors,method}=result,cell=Math.max(2,Math.floor(280/Math.max(width,height)));
+  canvas.width=width*cell;canvas.height=height*cell;
+  canvas.setAttribute('aria-label',`Imported pattern preview: ${width} squares across, ${height} squares down`);
+  const original=$('importSourceCanvas'), bounds=result.bounds||crop;
+  if(sourceImage){
+    const sw=bounds.w*sourceImage.naturalWidth,sh=bounds.h*sourceImage.naturalHeight,ratio=280/Math.max(sw,sh);
+    original.width=Math.max(1,Math.round(sw*ratio));original.height=Math.max(1,Math.round(sh*ratio));
+    const origCtx=original.getContext('2d');
+    origCtx.fillStyle='#ffffff';origCtx.fillRect(0,0,original.width,original.height);
+    origCtx.drawImage(sourceImage,bounds.x*sourceImage.naturalWidth,bounds.y*sourceImage.naturalHeight,sw,sh,0,0,original.width,original.height);
+  }
+  const ctx=canvas.getContext('2d');
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++){ctx.fillStyle=colors[y][x];ctx.fillRect(x*cell,y*cell,cell,cell);}
+  const detail=method==='detected'?'Grid detected automatically.':mode==='chart'?'Grid placed using the size and crop you entered. Check the edges carefully.':'Resized to the square count you entered.';
+  const paletteNote=mode==='chart'&&sourceIsJpeg?' Very similar JPEG shades are grouped to reduce image noise.':'';
+  $('importReviewDetail').textContent=`${width} across × ${height} down · ${new Set(colors.flat()).size} colors. ${detail}${paletteNote}`;
+  $('importReview').classList.remove('hidden');
+  $('createPattern').classList.remove('hidden');
+  $('importStatus').textContent='Preview ready. Compare it with the original before saving.';
+  $('importReview').scrollIntoView({block:'nearest'});
+}
+$('previewPattern').addEventListener('click',async ()=>{
+  if(!sourceImage||analysisBusy||dragStart)return;
+  invalidateImport();
+  const mode=$('importMode').value,useManual=mode==='chart'&&$('importManual').checked;
+  const dimensions=mode==='pixel'||useManual;
+  const cols=Number($('importCols').value),rows=Number($('importRows').value),valid=n=>Number.isInteger(n)&&n>=2&&n<=150;
+  if(dimensions&&!(valid(cols)&&valid(rows))){
+    $('importAdjust').open=true;
+    $('importError').textContent='Enter 2–150 squares across and down.';
+    $(valid(cols)?'importRows':'importCols').focus();return;
+  }
+  const options={mode,crop,useManual,ignoreRedGuides:$('importGuides').checked,compressPalette:mode==='chart'&&sourceIsJpeg,...(dimensions?{cols,rows}:{})};
+  const image=sourceImage,token=importReadToken,revision=importRevision;
+  analysisBusy=true;$('previewPattern').disabled=true;
+  $('importStatus').textContent='Building preview…';
+  try {
+    // Let the status paint before CPU-bound grid analysis.
+    await new Promise(resolve=>setTimeout(resolve,35));
+    if(token!==importReadToken||revision!==importRevision||sourceImage!==image||!$('importModal').classList.contains('open'))return;
+    const result=GlowRowImport.analyze(readImportImage(image),options);
+    if(result.method==='needs-input'){
+      $('importStatus').textContent='';
+      $('importAdjust').open=true;
+      $('importError').textContent=result.reason||'The grid could not be counted reliably. Try cropping to the chart or enter the square count yourself.';
+      return;
+    }
+    if(!valid(result.width)||!valid(result.height)||!Array.isArray(result.colors)||result.colors.length!==result.height||
+       !result.colors.every(row=>Array.isArray(row)&&row.length===result.width&&row.every(color=>/^#[0-9a-f]{6}$/i.test(color))))
+      throw Error('Invalid import pixels');
+    showImportPreview(result,mode);
+  }catch(e){
+    console.error(e);$('importStatus').textContent='';
+    $('importError').textContent='Could not build a preview. Try a straight-on image or a PNG or JPG screenshot.';
+  }finally{if(token===importReadToken){analysisBusy=false;$('previewPattern').disabled=!sourceImage;}}
+});
+$('importVerified').addEventListener('change',()=>{$('createPattern').disabled=!importResult||!$('importVerified').checked;});
+$('createPattern').addEventListener('click',()=>{
+  if(!importResult||!$('importVerified').checked)return;
+  const {width,height,colors:pixels}=importResult;
+  const name=$('importName').value.trim().slice(0,60)||'New pattern';
+  const p={id:`p-${Date.now()}-${Math.random().toString(36).slice(2,9)}`,name,width,height,pixels,row:1,corner:state.defaultCorner};
+  const next={...state,projects:[...state.projects,p],activeId:p.id};
+  try{localStorage.setItem(STORAGE_KEY,JSON.stringify(next));}
+  catch(err){console.warn('Storage unavailable or full',err);$('importError').textContent='Could not save this pattern on this device. Your existing patterns have not changed.';return;}
+  state=next;
+  sourceImage=null;invalidateImport();render();closeModal('importModal');closeModal('projectsModal');
+});
+importFields();
 // Swipe gesture on the pattern (no internet, no permissions or account required).
 let touchStart=null;
 $('patternCanvas').addEventListener('touchstart',e=>{if(e.touches.length===1)touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY};else touchStart=null;},{passive:true});

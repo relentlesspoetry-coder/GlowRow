@@ -13,8 +13,10 @@ Requires Android 8.0 (API 26) or a compatible Fire OS version and an enabled sys
 ## Use it
 
 - Tap **Patterns → Add a pattern** and choose an image using the tablet’s picker.
-- For a chart screenshot, crop to the chart and enter the actual number of squares across and down. Toggle **Image contains printed grid lines** to sample inside the squares.
-- In **Settings**, choose the same starting corner you’re using for your crochet piece.
+- For a chart or screenshot with grid lines, select **Crochet chart or screenshot** and tap **Preview pattern**. GlowRow detects the square count when the grid is clear.
+- Compare the preview with the selected image area. Check the square count and colors before confirming and tapping **Save pattern**. If detection is unsure or the result doesn’t match, open **Adjust grid or crop**, crop to the chart edges, and choose **Enter the chart size myself**. A straight-on image or screenshot usually works better than an angled photo.
+- For an image with no grid lines, select **Plain pixel art** and enter the number of squares across and down before previewing.
+- New patterns start at **Bottom Right**. To change the starting corner, open **Settings**. GlowRow remembers your choice for future patterns and keeps each saved pattern’s own corner and progress.
 - Use **Next**, **Previous**, or swipe the grid. Tap the row counter to jump to a specific row.
 - Patterns, stitch colors, and progress stay on this device. No account or advertising. The viewer and crochet work offline. Uninstalling or clearing app data deletes local patterns and progress.
 
@@ -32,7 +34,7 @@ export GLOWROW_STORE_PASS
 unset GLOWROW_STORE_PASS
 ```
 
-The script verifies signing and alignment and prints the SHA-256 of `dist/GlowRow.apk`. Run `node --test tests/viewer.test.cjs` for the offline viewer tests.
+The script verifies signing and alignment and prints the SHA-256 of `dist/GlowRow.apk`. Run `node --test tests/*.test.cjs` for the offline viewer, grid import, and branding tests.
 
 ## Updates
 

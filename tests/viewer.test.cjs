@@ -5,21 +5,22 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const html = readFileSync(join(__dirname,'../app/src/main/assets/index.html'),'utf8');
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
-function app(storage = new Map()) {
+function app(storage = new Map(), analyze, imageData) {
   const elements = new Map();
   const paint = [];
   const ctx = {
     fillRect(x,y,w,h) { paint.push({color:this.fillStyle,alpha:this.globalAlpha,x,y,w,h}); },
-    beginPath(){}, moveTo(){}, lineTo(){}, stroke(){},
+    beginPath(){}, moveTo(){}, lineTo(){}, stroke(){}, drawImage(){},
+    getImageData(){return imageData||{data:new Uint8Array(160),width:5,height:8};},
     strokeRect(x,y,w,h){paint.push({outline:this.strokeStyle,alpha:this.globalAlpha,x,y,w,h});},
   };
   function element(id) {
     if (!elements.has(id)) elements.set(id,{
       id, style:{}, events:{}, children:[], classList:{
-        values:new Set(), add(t){this.values.add(t);}, remove(t){this.values.delete(t);},
+        values:new Set(), contains(t){return this.values.has(t);}, add(t){this.values.add(t);}, remove(t){this.values.delete(t);},
         toggle(t,show){ if(show)this.add(t);else this.remove(t); }
       },
-      setAttribute(){}, getContext(){return ctx;}, appendChild(node){this.children.push(node);},
+      setAttribute(){}, focus(){}, scrollIntoView(){}, getContext(){return ctx;}, appendChild(node){this.children.push(node);},
       replaceChildren(){this.children=[];},
       addEventListener(event, fn){this.events[event]=fn;}, append(...nodes){nodes.forEach(node=>this.appendChild(node));},
     });
@@ -30,9 +31,10 @@ function app(storage = new Map()) {
     querySelectorAll:()=>Array.from(elements.values()).filter(el=>el.classList.values.has('open')),
   };
   document.querySelector=()=>document.querySelectorAll()[0];
-  const realm = vm.createContext({document,window:{},console,
+  const realm = vm.createContext({document,window:{},console,setTimeout,GlowRowImport:{analyze},
     localStorage:{getItem:key=>storage.get(key),setItem:(key,val)=>storage.set(key,val)},
   });
+  if(!analyze)vm.runInContext(html.match(/<script id="gridImportCore">([\s\S]*?)<\/script>/)[1],realm);
   vm.runInContext(script,realm);
   const evaluate=code=>JSON.parse(vm.runInContext(`JSON.stringify(${code})`,realm));
   return {evaluate, element,paint,run:code=>vm.runInContext(code,realm)};
@@ -84,4 +86,176 @@ test('Android Back closes an open dialog before leaving the app',()=>{
   run("openModal('importModal')");
   assert.equal(run('window.glowRowBack()'),true);
   assert.equal(run('window.glowRowBack()'),false);
+});
+
+test('chart import detects instead of assuming a size and only saves a verified color preview',async()=>{
+  const storage=new Map(), pattern={width:3,height:2,colors:[['#000000','#abcdef','#ffffff'],['#ed1000','#ffffff','#ffffff']],method:'detected'};
+  const {element,run,evaluate,paint}=app(storage,(_pixels,options)=>{
+    assert.equal(options.mode,'chart');
+    assert.equal(options.useManual,false);
+    assert.equal(options.ignoreRedGuides,false);
+    assert.ok(!('cols' in options) && !('rows' in options));
+    return pattern;
+  });
+  element('newPattern').events.click();
+  assert.equal(element('importCols').value,'');
+  assert.equal(element('importRows').value,'');
+  run("sourceImage={naturalWidth:50,naturalHeight:80}; invalidateImport();");
+  await element('previewPattern').events.click();
+  assert.equal(element('importReview').classList.contains('hidden'),false);
+  assert.match(element('importReviewDetail').textContent,/3 across × 2 down · 4 colors/);
+  assert.ok(paint.some(p=>p.color==='#ed1000'));
+  assert.equal(element('createPattern').disabled,true);
+  element('createPattern').events.click();
+  assert.equal(storage.size,0);
+  element('importVerified').checked=true;
+  element('importVerified').events.change();
+  assert.equal(element('createPattern').disabled,false);
+  element('createPattern').events.click();
+  assert.deepEqual(evaluate('current().pixels'),pattern.colors);
+  assert.equal(JSON.parse(storage.get('c2c-crochet-v1')).projects.length,2);
+});
+
+test('uncertain chart detection cannot save; manual or plain mode needs entered dimensions',async()=>{
+  const {element,run}=app(undefined,(_pixels,options)=>{
+    if(!options.useManual && options.mode==='chart')return {method:'needs-input',reason:'Could not count the printed grid.'};
+    assert.equal(options.cols,2);
+    assert.equal(options.rows,2);
+    assert.equal(options.ignoreRedGuides,false);
+    return {method:'manual',width:2,height:2,colors:[['#ffffff','#cc0000'],['#000000','#ffffff']]};
+  });
+  element('newPattern').events.click();
+  run("sourceImage={naturalWidth:50,naturalHeight:80}; invalidateImport();");
+  await element('previewPattern').events.click();
+  assert.equal(element('importAdjust').open,true);
+  assert.equal(element('importError').textContent,'Could not count the printed grid.');
+  assert.equal(element('createPattern').disabled,true);
+  element('importManual').checked=true;
+  element('importManual').events.change();
+  await element('previewPattern').events.click();
+  assert.match(element('importError').textContent,/2–150 squares/);
+  element('importCols').value='2';
+  element('importRows').value='2';
+  await element('previewPattern').events.click();
+  assert.match(element('importReviewDetail').textContent,/Grid placed using the size/);
+  element('importVerified').checked=true;
+  element('importVerified').events.change();
+  element('importMode').value='pixel';
+  element('importMode').events.change();
+  assert.equal(element('createPattern').disabled,true);
+  assert.equal(element('importReview').classList.contains('hidden'),true);
+  await element('previewPattern').events.click();
+  assert.match(element('importReviewDetail').textContent,/Resized to the square count/);
+  element('importCols').value='3';
+  element('importCols').events.input();
+  assert.equal(element('createPattern').disabled,true);
+});
+
+test('a failed write leaves the existing pattern in place and keeps the reviewed draft',()=>{
+  const storage=new Map();
+  storage.set=()=>{throw Error('Storage quota');};
+  const {element,run,evaluate}=app(storage);
+  element('newPattern').events.click();
+  run("showImportPreview({width:2,height:2,colors:[['#101010','#202020'],['#303030','#404040']],method:'detected'},'chart')");
+  element('importVerified').checked=true;
+  element('importVerified').events.change();
+  element('createPattern').events.click();
+  assert.equal(evaluate('state.projects.length'),1);
+  assert.equal(evaluate('state.activeId'),'example-mint-diamond');
+  assert.match(element('importError').textContent,/existing patterns have not changed/);
+  assert.equal(element('importReview').classList.contains('hidden'),false);
+});
+
+test('real import core and form save the original colors for a non-square plain image',async()=>{
+  const width=3,height=2;
+  const data=new Uint8Array([
+    255,255,255,255, 0,0,0,255, 255,0,0,255,
+    30,90,180,255, 55,40,60,255, 10,20,30,255,
+  ]);
+  const {element,run,evaluate}=app(undefined,undefined,{data,width,height});
+  element('newPattern').events.click();
+  run('sourceImage={naturalWidth:3,naturalHeight:2}; invalidateImport();');
+  element('importMode').value='pixel';
+  element('importMode').events.change();
+  element('importCols').value='3';
+  element('importRows').value='2';
+  await element('previewPattern').events.click();
+  assert.equal(element('importError').textContent,'');
+  assert.match(element('importReviewDetail').textContent,/3 across × 2 down · 6 colors/);
+  element('importVerified').checked=true;
+  element('importVerified').events.change();
+  element('createPattern').events.click();
+  assert.deepEqual(evaluate('current().pixels'),[['#ffffff','#000000','#ff0000'],['#1e5ab4','#37283c','#0a141e']]);
+});
+
+test('Bottom Right is the fresh-install default and saved corner survives restart and pattern switches',()=>{
+  const storage=new Map();
+  let {element,run,evaluate}=app(storage);
+  assert.equal(evaluate('state.defaultCorner'), 'br');
+  assert.equal(evaluate('current().corner'), 'br');
+  assert.deepEqual(evaluate('diagonalCells(current(),1)'),[{r:14,c:14}]);
+  function importDraft(name){
+    element('newPattern').events.click();
+    element('importName').value=name;
+    run("showImportPreview({width:2,height:2,colors:[['#101010','#202020'],['#303030','#404040']],method:'detected'},'chart')");
+    element('importVerified').checked=true;
+    element('createPattern').events.click();
+  }
+  importDraft('Original corner');
+  assert.equal(evaluate('current().corner'), 'br');
+  run('setRow(3)');
+  const original=evaluate('current().id');
+  run("state.activeId='example-mint-diamond'; saveState();");
+  element('openSettings').events.click();
+  element('startCorner').value='tr';
+  element('showStrip').checked=true;
+  element('saveSettings').events.click();
+  assert.equal(evaluate('current().corner'), 'tr');
+  assert.equal(evaluate('state.defaultCorner'), 'tr');
+  ({element,run,evaluate}=app(storage));
+  assert.equal(evaluate('current().corner'), 'tr');
+  run(`state.activeId=${JSON.stringify(original)}; saveState();`);
+  assert.deepEqual(evaluate('[current().corner,current().row]'),['br',3]);
+  element('openSettings').events.click();
+  assert.equal(element('startCorner').value,'br');
+  element('showStrip').checked=false;
+  element('saveSettings').events.click();
+  assert.equal(evaluate('state.defaultCorner'), 'tr');
+  assert.deepEqual(evaluate('[current().corner,current().row]'),['br',3]);
+  importDraft('New default');
+  assert.deepEqual(evaluate('[current().corner,current().row]'),['tr',1]);
+  ({evaluate}=app(storage));
+  assert.equal(evaluate('state.defaultCorner'), 'tr');
+  assert.equal(evaluate('current().name'), 'New default');
+  assert.deepEqual(evaluate(`state.projects.filter(p=>p.id===${JSON.stringify(original)}).map(p=>[p.corner,p.row])`),[['br',3]]);
+});
+
+test('upgrade preserves a legacy in-progress Top Left project but migrates the untouched sample',()=>{
+  const key='c2c-crochet-v1', sample=app().evaluate('newSample()');
+  const storage=new Map([[key,JSON.stringify({activeId:sample.id,projects:[{...sample,corner:'tl',row:1}]})]]);
+  let {evaluate}=app(storage);
+  assert.deepEqual(evaluate('[state.defaultCorner,current().corner,current().row]'),['br','br',1]);
+  storage.set(key,JSON.stringify({activeId:sample.id,projects:[{...sample,corner:'tl',row:4}]}));
+  ({evaluate}=app(storage));
+  assert.deepEqual(evaluate('[state.defaultCorner,current().corner,current().row]'),['br','tl',4]);
+  storage.set(key,JSON.stringify({activeId:sample.id,projects:[{...sample,corner:'bl',row:1}]}));
+  ({evaluate}=app(storage));
+  assert.deepEqual(evaluate('[state.defaultCorner,current().corner,current().row]'),['br','bl',1]);
+});
+
+test('near-color JPEG cleanup is requested only for printed charts',async()=>{
+  const modes=[];
+  const {element,run}=app(undefined,(_pixels,opts)=>{modes.push([opts.mode,opts.compressPalette]);return {method:'needs-input'};});
+  element('newPattern').events.click();
+  run('sourceImage={naturalWidth:50,naturalHeight:50}; sourceIsJpeg=true; invalidateImport();');
+  await element('previewPattern').events.click();
+  element('importMode').value='pixel';
+  element('importMode').events.change();
+  element('importCols').value='2';element('importRows').value='2';
+  await element('previewPattern').events.click();
+  element('importMode').value='chart';
+  element('importMode').events.change();
+  run('sourceIsJpeg=false;');
+  await element('previewPattern').events.click();
+  assert.deepEqual(modes,[['chart',true],['pixel',false],['chart',false]]);
 });
